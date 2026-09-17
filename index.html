@@ -7,7 +7,25 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Наша волна ♡</title>
-  <link rel="stylesheet" href="style.css?v=20260917-7">
+  <link rel="stylesheet" href="style.css?v=20260917-8">
+  <style>
+    @media (max-width:900px){
+      .memory-orbit{position:absolute!important;inset:0!important;left:0!important;top:0!important;width:100%!important;height:100%!important;transform:none!important;}
+      .memory{width:clamp(60px,17.5vw,70px)!important;height:clamp(60px,17.5vw,70px)!important;transform:translate(-50%,-50%)!important;}
+      .memory:nth-child(1){left:50%!important;top:calc(50% - min(34vw,132px))!important}
+      .memory:nth-child(2){left:calc(50% + min(24vw,94px))!important;top:calc(50% - min(24vw,94px))!important}
+      .memory:nth-child(3){left:calc(50% + min(34vw,132px))!important;top:50%!important}
+      .memory:nth-child(4){left:calc(50% + min(24vw,94px))!important;top:calc(50% + min(24vw,94px))!important}
+      .memory:nth-child(5){left:50%!important;top:calc(50% + min(34vw,132px))!important}
+      .memory:nth-child(6){left:calc(50% - min(24vw,94px))!important;top:calc(50% + min(24vw,94px))!important}
+      .memory:nth-child(7){left:calc(50% - min(34vw,132px))!important;top:50%!important}
+      .memory:nth-child(8){left:calc(50% - min(24vw,94px))!important;top:calc(50% - min(24vw,94px))!important}
+    }
+    @media (max-width:380px){
+      .memory{width:62px!important;height:62px!important}
+      .memory:nth-child(1){top:calc(50% - 116px)!important}.memory:nth-child(2){left:calc(50% + 82px)!important;top:calc(50% - 82px)!important}.memory:nth-child(3){left:calc(50% + 116px)!important}.memory:nth-child(4){left:calc(50% + 82px)!important;top:calc(50% + 82px)!important}.memory:nth-child(5){top:calc(50% + 116px)!important}.memory:nth-child(6){left:calc(50% - 82px)!important;top:calc(50% + 82px)!important}.memory:nth-child(7){left:calc(50% - 116px)!important}.memory:nth-child(8){left:calc(50% - 82px)!important;top:calc(50% - 82px)!important}
+    }
+  </style>
 </head>
 <body>
   <div class="app" id="app">
@@ -19,6 +37,6 @@
     <section class="mobile-list" id="mobileList"><div class="section-title"><span>Наша история</span><span id="countLabel">8 видео</span></div><div id="mobileItems"></div></section>
     <section class="secret" id="secret" aria-hidden="true"><div class="secret-inner"><div class="secret-orb">?</div><div class="secret-kicker">Ты посмотрела всё. ♡</div><h2>А теперь —<br>самое важное.</h2><p>Здесь ещё нет наших будущих воспоминаний.<br>Давай создадим их вместе. ♡</p><div class="counter"><span id="days">0</span><small>дней вместе</small><div class="counter-sub"><span id="hours">0</span> часов&nbsp;&nbsp; <span id="minutes">0</span> минут</div></div><div class="future">2021&nbsp;&nbsp; → &nbsp;&nbsp;2026&nbsp;&nbsp; → &nbsp;&nbsp;2027&nbsp;&nbsp; → &nbsp;&nbsp;2028&nbsp;&nbsp; → &nbsp;&nbsp;∞</div><div class="secret-line">Я хочу однажды открыть эту страницу<br>и увидеть там 10 000 дней.<br><b>И чтобы рядом со мной всё ещё была ты.</b></div><div class="infinity">09.04.2021 — ∞</div><div class="final-heart">♡</div></div></section>
   </div>
-  <script src="script.js?v=20260917-2"></script>
+  <script src="script.js?v=20260917-3"></script>
 </body>
 </html>
