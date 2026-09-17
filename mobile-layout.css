@@ -6,21 +6,12 @@
   .hero-copy p{margin-top:24px!important;margin-bottom:22px!important;letter-spacing:.12em!important}
   .memory-orbit{inset:0!important}
   .memory{width:62px!important;height:62px!important}
-  .memory:nth-child(1){left:50%!important;top:21%!important}
-  .memory:nth-child(2){left:76%!important;top:30%!important}
-  .memory:nth-child(3){left:88%!important;top:49%!important}
-  .memory:nth-child(4){left:76%!important;top:69%!important}
-  .memory:nth-child(5){left:50%!important;top:81%!important}
-  .memory:nth-child(6){left:24%!important;top:69%!important}
-  .memory:nth-child(7){left:12%!important;top:49%!important}
-  .memory:nth-child(8){left:24%!important;top:30%!important}
-  .memory:before{inset:-5px -7px!important;border-width:1px!important;box-shadow:0 0 10px rgba(255,103,100,.18)!important}
-  .memory:after{inset:-8px -7px!important;border-width:1px!important;box-shadow:0 0 11px rgba(255,121,111,.10)!important}
-  .memory .number{width:21px!important;height:21px!important}
-  .memory .number:after{top:calc(100% + 5px)!important;font-size:14px!important}
+  .memory:nth-child(1){left:50%!important;top:21%!important}.memory:nth-child(2){left:76%!important;top:30%!important}.memory:nth-child(3){left:88%!important;top:49%!important}.memory:nth-child(4){left:76%!important;top:69%!important}.memory:nth-child(5){left:50%!important;top:81%!important}.memory:nth-child(6){left:24%!important;top:69%!important}.memory:nth-child(7){left:12%!important;top:49%!important}.memory:nth-child(8){left:24%!important;top:30%!important}
+  .memory:before{inset:-5px -7px!important;border-width:1px!important;box-shadow:0 0 10px rgba(255,103,100,.18)!important}.memory:after{inset:-8px -7px!important;border-width:1px!important;box-shadow:0 0 11px rgba(255,121,111,.10)!important}.memory .number{width:21px!important;height:21px!important}.memory .number:after{top:calc(100% + 5px)!important;font-size:14px!important}
+  /* Video player: mobile full-screen overlay with a clearly visible close button. */
+  .player-panel{position:fixed!important;inset:0!important;width:100vw!important;height:100dvh!important;min-height:100svh!important;margin:0!important;padding:76px 14px 28px!important;z-index:1000!important;background:rgba(5,4,8,.985)!important;overflow:auto!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important}
+  .player-panel.open{opacity:1!important;visibility:visible!important;pointer-events:auto!important;transform:none!important}
+  .close-player{position:fixed!important;display:grid!important;place-items:center!important;top:max(14px,env(safe-area-inset-top))!important;right:16px!important;width:48px!important;height:48px!important;z-index:1100!important;border:1px solid rgba(255,205,195,.38)!important;border-radius:50%!important;background:rgba(28,18,24,.92)!important;color:#fff!important;font-size:30px!important;line-height:1!important;box-shadow:0 0 25px rgba(255,95,100,.22),0 8px 30px rgba(0,0,0,.45)!important;opacity:1!important;visibility:visible!important}
+  .video-wrap{width:min(100%,430px)!important;max-height:67svh!important;aspect-ratio:9/16!important;margin:0 auto!important}.player-meta{width:min(100%,430px)!important;margin:0 auto!important}
 }
-@media(max-width:380px){
- .hero-copy{top:53%!important;width:70%!important}
- .memory{width:58px!important;height:58px!important}
- .memory:nth-child(1){top:20%!important}.memory:nth-child(2){left:75%!important;top:29%!important}.memory:nth-child(3){left:88%!important;top:49%!important}.memory:nth-child(4){left:75%!important;top:70%!important}.memory:nth-child(5){top:82%!important}.memory:nth-child(6){left:25%!important;top:70%!important}.memory:nth-child(7){left:12%!important;top:49%!important}.memory:nth-child(8){left:25%!important;top:29%!important}
-}
+@media(max-width:380px){.hero-copy{top:53%!important;width:70%!important}.memory{width:58px!important;height:58px!important}.memory:nth-child(1){top:20%!important}.memory:nth-child(2){left:75%!important;top:29%!important}.memory:nth-child(3){left:88%!important;top:49%!important}.memory:nth-child(4){left:75%!important;top:70%!important}.memory:nth-child(5){top:82%!important}.memory:nth-child(6){left:25%!important;top:70%!important}.memory:nth-child(7){left:12%!important;top:49%!important}.memory:nth-child(8){left:25%!important;top:29%!important}}
