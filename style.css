@@ -12,3 +12,31 @@
 @media(min-width:901px) and (max-width:1200px){.stage{grid-template-columns:1fr 340px;gap:18px;padding-left:20px;padding-right:20px}.memory{width:78px;height:78px}.hero-copy{width:72%}h1{font-size:clamp(58px,7vw,92px)}}
 @media(min-width:901px) and (max-height:800px){.hero{min-height:calc(100vh - 104px)}.memory{width:76px;height:76px}.hero-copy{top:48%}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}.memory{transition:none!important}#waveCanvas{display:none}}
+
+/* Nasha Volna — Variant 4: organic transparent photo bubbles */
+.memory{background:rgba(255,214,207,.055);border:1px solid rgba(255,196,184,.72);box-shadow:0 0 0 1px rgba(255,255,255,.035) inset,0 0 24px rgba(255,112,102,.22),0 0 52px rgba(255,74,100,.12);overflow:visible;isolation:isolate}
+.memory::before{content:"";position:absolute;inset:-6px;border:1px solid rgba(255,176,160,.48);border-radius:48% 52% 44% 56% / 54% 45% 55% 46%;transform:rotate(-13deg);z-index:-1;pointer-events:none;box-shadow:0 0 16px rgba(255,124,111,.16)}
+.memory::after{content:"";position:absolute;inset:-10px;border:1px solid rgba(255,145,135,.22);border-radius:53% 47% 57% 43% / 45% 56% 44% 55%;transform:rotate(21deg);z-index:-2;pointer-events:none}
+.memory img{border-radius:50%;opacity:.9;filter:saturate(.92) contrast(1.03);background:rgba(255,255,255,.03);box-shadow:inset 0 0 18px rgba(255,255,255,.12)}
+.memory .number{background:rgba(8,8,12,.72);border-color:rgba(255,211,201,.35);color:rgba(255,247,243,.92);backdrop-filter:blur(8px)}
+.memory .dot{background:#ff9b87;box-shadow:0 0 14px #ff786d}
+.memory:hover,.memory.active{box-shadow:0 0 0 1px rgba(255,255,255,.08) inset,0 0 34px rgba(255,126,113,.52),0 0 76px rgba(255,74,100,.2)}
+.memory:hover::before,.memory.active::before{inset:-8px;opacity:1;box-shadow:0 0 24px rgba(255,137,124,.26)}
+.memory:hover::after,.memory.active::after{inset:-12px}
+
+/* Romantic atmosphere: subtle blossoms and particles, keeping the wave visible */
+.hero::before{content:"✿  ·  ✿     ·        ✿";position:absolute;inset:0;z-index:2;pointer-events:none;color:rgba(255,161,166,.15);font-size:20px;letter-spacing:22px;line-height:3.5;transform:rotate(-8deg);opacity:.65;text-shadow:0 0 18px rgba(255,120,130,.22)}
+.hero::after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;background:radial-gradient(circle at 16% 18%,rgba(255,159,165,.18) 0 1px,transparent 2px),radial-gradient(circle at 83% 29%,rgba(255,194,184,.16) 0 1px,transparent 2px),radial-gradient(circle at 21% 73%,rgba(255,147,155,.13) 0 1px,transparent 2px),radial-gradient(circle at 77% 79%,rgba(255,179,165,.14) 0 1px,transparent 2px);mix-blend-mode:screen}
+
+/* Make the canvas wave warmer, silkier and more integrated with the circles */
+#waveCanvas{filter:brightness(2.05) saturate(1.18);}
+
+@media(max-width:900px){
+  .hero-copy{top:49%;width:76%}
+  h1{font-size:clamp(56px,16.1vw,66px)}
+  .hero-copy p{font-size:8px;letter-spacing:.14em;margin:20px 0}
+  .memory{width:62px!important;height:62px!important}
+  .memory::before{inset:-5px}.memory::after{inset:-8px}
+}
+@media(max-width:380px){.memory{width:58px!important;height:58px!important}.memory::before{inset:-4px}.memory::after{inset:-7px}}
+@media(min-width:901px){.memory{width:96px;height:96px}}
