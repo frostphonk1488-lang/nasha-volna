@@ -1,0 +1,37 @@
+.blackhole-stage{background:transparent!important;transition:none!important;overflow:hidden!important}
+.blackhole-stage .bh-space{opacity:0!important;transition:opacity 2.4s ease!important;background:radial-gradient(circle at 50% 50%,rgba(255,80,48,.16),transparent 18%),radial-gradient(circle at 50% 50%,rgba(5,4,8,.42) 0 20%,rgba(0,0,0,.16) 42%,transparent 72%)!important}
+.blackhole-stage.active .bh-space{opacity:1!important}
+.blackhole-stage .bh-stars{opacity:0!important;transition:opacity 2.6s ease!important}
+.blackhole-stage.active .bh-stars{opacity:.35!important}
+.blackhole-stage .bh-vignette{opacity:0;transition:opacity 3s ease;z-index:8!important}
+.blackhole-stage.active .bh-vignette{opacity:1}
+.blackhole-stage .bh-core{transform:translate(-50%,-50%) scale(.015)!important;transition:transform 2.8s cubic-bezier(.18,.85,.12,1)!important}
+.blackhole-stage.active .bh-core{transform:translate(-50%,-50%) scale(1)!important}
+.blackhole-stage .bh-shadow-ring{transform:translate(-50%,-50%) scale(.015)!important;transition:transform 2.9s cubic-bezier(.18,.85,.12,1)!important}
+.blackhole-stage.active .bh-shadow-ring{transform:translate(-50%,-50%) scale(1)!important}
+.blackhole-stage .bh-accretion,.blackhole-stage .bh-lens,.blackhole-stage .bh-photon-ring,.blackhole-stage .bh-vortex{opacity:0!important;transition:opacity 1.8s ease 1.15s!important}
+.blackhole-stage.active .bh-accretion,.blackhole-stage.active .bh-lens,.blackhole-stage.active .bh-photon-ring,.blackhole-stage.active .bh-vortex{opacity:1!important}
+.blackhole-stage .bh-accretion{animation:none!important}
+.blackhole-stage.active .bh-accretion{animation:fixAccretionSpin 2.7s linear 1.5s infinite!important}
+.blackhole-stage.active .bh-a2{animation-duration:4.1s!important;animation-delay:1.5s!important}
+.blackhole-stage.active .bh-a3{animation-duration:2.15s!important;animation-delay:1.5s!important}
+.blackhole-stage .bh-lens{transform:translate(-50%,-50%) rotate(-9deg) scale(.02)!important;transition:transform 3s cubic-bezier(.18,.85,.12,1),opacity 1.4s ease 1s!important}
+.blackhole-stage.active .bh-lens{transform:translate(-50%,-50%) rotate(-9deg) scale(1)!important;animation:fixLens 4.2s linear 1.6s infinite!important}
+.blackhole-stage .bh-photon-ring{transform:translate(-50%,-50%) scale(.02)!important;transition:transform 2.8s cubic-bezier(.18,.85,.12,1),opacity 1.2s ease 1.2s!important}
+.blackhole-stage.active .bh-photon-ring{transform:translate(-50%,-50%) scale(1)!important;animation:fixRing 1.4s ease-in-out 1.6s infinite!important}
+.blackhole-stage .bh-streams{opacity:0!important;transition:opacity 1.8s ease 1.2s!important}
+.blackhole-stage.active .bh-streams{opacity:1!important}
+.blackhole-stage .bh-wave{opacity:0!important;transform:translate(-50%,-50%) rotate(-10deg) scale(.2)!important;transition:opacity 2s ease 1s,transform 3s cubic-bezier(.18,.8,.1,1)!important}
+.blackhole-stage.active .bh-wave{opacity:.72!important;transform:translate(-50%,-50%) rotate(-10deg) scale(1)!important;animation:fixWarp 3.8s ease-in-out 1.5s infinite,fixWaveFlow 7s linear 1.5s infinite!important}
+.blackhole-stage.active .bh-wave.w2{animation-delay:1.9s,1.5s!important}
+.memory.bh-sucking{position:fixed!important;z-index:10001!important;margin:0!important;pointer-events:none!important;will-change:left,top,transform,opacity,filter!important;transition:none!important}
+.memory.bh-sucking:before,.memory.bh-sucking:after{animation:fixMemoryWave 1.35s ease-in forwards!important;transform-origin:center!important}
+.memory.bh-gone{opacity:0!important;visibility:hidden!important}
+.bh-particle-canvas{z-index:2!important;opacity:0;transition:opacity 2s ease 1.2s!important}
+.blackhole-stage.active .bh-particle-canvas{opacity:1}
+@keyframes fixAccretionSpin{from{transform:translate(-50%,-50%) scale(1) rotate(-14deg)}to{transform:translate(-50%,-50%) scale(1) rotate(346deg)}}
+@keyframes fixLens{from{transform:translate(-50%,-50%) rotate(-9deg) scale(1)}to{transform:translate(-50%,-50%) rotate(351deg) scale(1.03,.96)}}
+@keyframes fixRing{0%,100%{box-shadow:0 0 10px #fff0d2,0 0 28px rgba(255,123,66,.95),0 0 75px rgba(255,65,40,.65),0 0 125px rgba(255,40,30,.24)}50%{box-shadow:0 0 22px #fff6e8,0 0 48px rgba(255,123,66,1),0 0 105px rgba(255,55,35,.8),0 0 170px rgba(255,40,30,.32)}}
+@keyframes fixWarp{0%,100%{transform:translate(-50%,-50%) rotate(-10deg) scale(1)}50%{transform:translate(-50%,-50%) rotate(-5deg) scale(1.08,.78)}}
+@keyframes fixWaveFlow{from{filter:blur(.1px) hue-rotate(0deg)}to{filter:blur(1px) hue-rotate(18deg)}}
+@keyframes fixMemoryWave{0%{opacity:1;transform:scale(1) rotate(0)}100%{opacity:0;transform:scale(.08) rotate(520deg)}}
