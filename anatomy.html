@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Анатомическая схема</title>
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f4f1ec;color:#24211f;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+.card{width:min(900px,94vw);padding:28px;border-radius:24px;background:#fff;box-shadow:0 20px 60px #0001;text-align:center}
+h1{margin:0 0 8px;font-size:clamp(25px,5vw,42px)}p{margin:0 0 20px;color:#777}
+svg{width:min(620px,100%);height:auto;display:block;margin:auto}
+.label{font-size:15px;fill:#333}.line{stroke:#555;stroke-width:2;fill:none}.skin{fill:#e7a88e;stroke:#9d6655;stroke-width:3}.inner{fill:#d98d78;stroke:#9d6655;stroke-width:3}.soft{fill:#f2c0ad;stroke:#9d6655;stroke-width:3}
+.note{font-size:12px;color:#999;margin-top:14px}
+</style>
+</head>
+<body>
+<main class="card">
+<h1>Анатомическая схема</h1>
+<p>Упрощённая образовательная иллюстрация наружной анатомии.</p>
+<svg viewBox="0 0 620 650" role="img" aria-label="Схематичное изображение женской наружной анатомии">
+<ellipse class="skin" cx="310" cy="320" rx="145" ry="225"/>
+<path class="soft" d="M310 145 C260 205 235 260 250 335 C265 410 285 470 310 505 C335 470 355 410 370 335 C385 260 360 205 310 145Z"/>
+<path class="inner" d="M310 225 C288 250 275 290 282 335 C289 382 300 420 310 440 C320 420 331 382 338 335 C345 290 332 250 310 225Z"/>
+<ellipse class="soft" cx="310" cy="232" rx="14" ry="10"/>
+<path class="line" d="M245 290 L105 235"/><text class="label" x="30" y="230">Большие половые губы</text>
+<path class="line" d="M282 335 L90 345"/><text class="label" x="35" y="350">Малые половые губы</text>
+<path class="line" d="M310 232 L465 165"/><text class="label" x="470" y="170">Клитор</text>
+<path class="line" d="M310 440 L465 505"/><text class="label" x="470" y="510">Вход во влагалище</text>
+</svg>
+<div class="note">Схема не является медицинской иллюстрацией и приведена только в образовательных целях.</div>
+</main>
+</body>
+</html>
