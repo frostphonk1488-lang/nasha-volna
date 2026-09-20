@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#09090d">
+<title>AI — Наша волна</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#08080c;color:#f7f4f8;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body:before{content:"";position:fixed;inset:0;background:radial-gradient(circle at 20% 0%,#5b183e44,transparent 35%),radial-gradient(circle at 90% 20%,#44246d33,transparent 35%);pointer-events:none}
+.app{min-height:100vh;display:flex;flex-direction:column;max-width:1100px;margin:auto;padding:18px}
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 4px 18px}.brand{font-weight:800;font-size:20px}.brand span{color:#ff8bc7}.back{color:#aaa;text-decoration:none}
+.layout{display:grid;grid-template-columns:270px 1fr;gap:14px;flex:1;min-height:calc(100vh - 100px)}
+.sidebar,.chat{border:1px solid #ffffff14;background:#111116cc;backdrop-filter:blur(20px);border-radius:22px;box-shadow:0 20px 70px #0008}
+.sidebar{padding:14px}.new{width:100%;border:1px solid #ffffff18;background:#ffffff0b;color:#fff;border-radius:13px;padding:12px;cursor:pointer;font-size:14px}
+.mem{margin-top:15px;font-size:12px;color:#999}.memory{margin-top:8px;padding:10px;border-radius:12px;background:#ffffff08;color:#ccc;font-size:12px;max-height:210px;overflow:auto}
+.chat{display:flex;flex-direction:column;overflow:hidden}.messages{flex:1;overflow:auto;padding:22px}.msg{display:flex;margin:0 0 18px}.msg.user{justify-content:flex-end}.bubble{max-width:min(760px,88%);padding:13px 16px;border-radius:17px;background:#19191f;line-height:1.5;white-space:pre-wrap}.user .bubble{background:linear-gradient(135deg,#74395f,#4c2b64)}.role{font-size:10px;color:#888;margin-bottom:5px}.composer{padding:12px;border-top:1px solid #ffffff10;display:flex;gap:8px}.composer textarea{flex:1;resize:none;min-height:48px;max-height:140px;border:1px solid #ffffff14;background:#0b0b0f;color:#fff;border-radius:15px;padding:13px;font:inherit;outline:none}.send{width:52px;border:0;border-radius:15px;background:#fff;color:#111;cursor:pointer;font-size:20px}.status{padding:0 18px 8px;color:#777;font-size:11px}
+@media(max-width:700px){.layout{grid-template-columns:1fr}.sidebar{display:none}.messages{padding:15px}.bubble{max-width:94%}}
+</style>
+</head>
+<body>
+<div class="app">
+<header><div class="brand">Мой AI <span>♡</span></div><a class="back" href="./index.html">← Наша волна</a></header>
+<div class="layout">
+<aside class="sidebar">
+<button class="new" id="newChat">＋ Новый диалог</button>
+<div class="mem">ПАМЯТЬ</div><div class="memory" id="memory">Пока ничего не запомнено.</div>
+</aside>
+<section class="chat">
+<div class="messages" id="messages"></div>
+<div class="status" id="status">Готов</div>
+<form class="composer" id="form"><textarea id="input" placeholder="Напиши сообщение…" rows="1"></textarea><button class="send" aria-label="Отправить">↑</button></form>
+</section>
+</div>
+</div>
+<script>
+const KEY="nasha_ai_state_v1";
+let state=JSON.parse(localStorage.getItem(KEY)||'null')||{messages:[],memory:[]};
+const $=id=>document.getElementById(id);
+function save(){localStorage.setItem(KEY,JSON.stringify(state));render()}
+function escapeHtml(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function render(){
+ $('messages').innerHTML=state.messages.length?state.messages.map(m=>'<div class="msg '+m.role+'"><div><div class="role">'+(m.role==='user'?'Ты':'AI')+'</div><div class="bubble">'+escapeHtml(m.content)+'</div></div></div>').join(''):'<div class="msg"><div><div class="role">AI</div><div class="bubble">Привет. Я твой AI-помощник. Я могу помнить контекст этого диалога и сохранённые заметки.</div></div></div>';
+ $('memory').textContent=state.memory.length?state.memory.join('\n\n'):'Пока ничего не запомнено.';
+ $('messages').scrollTop=$('messages').scrollHeight;
+}
+async function send(text){
+ if(!text.trim())return;
+ state.messages.push({role:'user',content:text.trim()});save();$('input').value='';$('status').textContent='Думаю…';
+ try{
+  const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:state.messages,memory:state.memory})});
+  const data=await r.json();
+  if(!r.ok)throw new Error(data.error||'Ошибка сервера');
+  state.messages.push({role:'assistant',content:data.reply});
+  if(Array.isArray(data.memory))state.memory=data.memory.slice(0,30);
+  save();$('status').textContent='Готов';
+ }catch(e){
+  state.messages.push({role:'assistant',content:'Не удалось связаться с AI-сервером. '+e.message});
+  save();$('status').textContent='Ошибка соединения';
+ }
+}
+$('form').addEventListener('submit',e=>{e.preventDefault();send($('input').value)});
+$('input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send(e.target.value)}});
+$('newChat').onclick=()=>{state.messages=[];save()};
+render();
+</script>
+</body></html>
