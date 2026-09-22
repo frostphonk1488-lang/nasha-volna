@@ -1,6 +1,0 @@
-{
-  "name":"nasha-volna-ai",
-  "private":true,
-  "type":"module",
-  "dependencies":{"openai":"latest"}
-}
