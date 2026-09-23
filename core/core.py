@@ -1,78 +1,99 @@
-"""Nasha Volna Core v0.1 — архитектурный skeleton.
+"""Nasha Volna Core v0.2 — локальный исполняемый AI Core.
 
-Это не готовый production backend. Файл задаёт контракт между
-Router, Memory, Tools и Executor.
+Поток:
+text -> Router -> Tool Runtime -> Memory/Action -> result
 """
 
-from dataclasses import dataclass, field
-from typing import Any, Callable
+from dataclasses import dataclass
+from .memory import MemoryStore
+from .router import Router, Intent
+from .tools_runtime import Tool, ToolRuntime
 
 
 @dataclass
-class Intent:
-    name: str
-    arguments: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class Tool:
-    name: str
-    description: str
-    execute: Callable[..., Any]
-    requires_confirmation: bool = False
-
-
-class Memory:
-    def __init__(self) -> None:
-        self.items: list[dict[str, Any]] = []
-
-    def save(self, item: dict[str, Any]) -> dict[str, Any]:
-        self.items.append(item)
-        return item
-
-    def search(self, query: str) -> list[dict[str, Any]]:
-        q = query.lower()
-        return [
-            item for item in self.items
-            if q in str(item.get("content", "")).lower()
-        ]
-
-
-class ToolRegistry:
-    def __init__(self) -> None:
-        self.tools: dict[str, Tool] = {}
-
-    def register(self, tool: Tool) -> None:
-        self.tools[tool.name] = tool
-
-    def get(self, name: str) -> Tool:
-        if name not in self.tools:
-            raise KeyError(f"Unknown tool: {name}")
-        return self.tools[name]
+class Task:
+    id: str
+    title: str
+    status: str = "Новая"
 
 
 class NashaVolnaCore:
-    def __init__(self) -> None:
-        self.memory = Memory()
-        self.tools = ToolRegistry()
+    def __init__(self, memory_path: str = "data/memory.json"):
+        self.memory = MemoryStore(memory_path)
+        self.router = Router()
+        self.runtime = ToolRuntime()
+        self.tasks: list[Task] = []
+        self._register_tools()
 
-    def handle(self, intent: Intent) -> Any:
-        tool = self.tools.get(intent.name)
+    def _register_tools(self):
+        self.runtime.register(Tool(
+            "memory.save",
+            "Save durable memory",
+            lambda content: self.memory.add(content).content,
+        ))
+        self.runtime.register(Tool(
+            "memory.search",
+            "Search durable memory",
+            self._memory_search,
+        ))
+        self.runtime.register(Tool(
+            "memory.list",
+            "List durable memory",
+            lambda: [m.content for m in self.memory.all()],
+        ))
+        self.runtime.register(Tool(
+            "task.create",
+            "Create a task",
+            self._create_task,
+        ))
+        self.runtime.register(Tool(
+            "task.list",
+            "List tasks",
+            lambda: [f"{t.title} — {t.status}" for t in self.tasks],
+        ))
 
-        if tool.requires_confirmation:
-            return {
-                "status": "confirmation_required",
-                "tool": tool.name,
-                "arguments": intent.arguments,
-            }
+    def _memory_search(self, query: str):
+        return [m.content for m in self.memory.search(query)]
 
-        return tool.execute(**intent.arguments)
+    def _create_task(self, title: str):
+        task = Task(
+            id=f"task-{len(self.tasks) + 1}",
+            title=title,
+        )
+        self.tasks.append(task)
+        return {
+            "id": task.id,
+            "title": task.title,
+            "status": task.status,
+        }
+
+    def handle(self, text: str):
+        intent: Intent = self.router.route(text)
+        result = self.runtime.execute(intent.name, intent.arguments)
+        return {
+            "input": text,
+            "intent": intent.name,
+            "arguments": intent.arguments,
+            "result": result,
+        }
+
+
+def demo():
+    core = NashaVolnaCore()
+
+    examples = [
+        "Запомни, что основной продукт — Nasha Volna AI",
+        "Запомни, что дедлайн проекта Альфа — 15 октября",
+        "Что ты помнишь?",
+        "Найди Альфа",
+        "Создай задачу: проверить архитектуру Core",
+        "Какие у меня задачи?",
+    ]
+
+    for text in examples:
+        print("\nUSER:", text)
+        print("CORE:", core.handle(text))
 
 
 if __name__ == "__main__":
-    core = NashaVolnaCore()
-    core.memory.save({
-        "type": "fact",
-        "content": "Nasha Volna строит собственное AI Core",
-    })
-    print(core.memory.search("AI Core"))
+    demo()
