@@ -1,4 +1,6 @@
 const $=s=>document.querySelector(s), usersKey='nv_users', sessionKey='nv_session';let users=JSON.parse(localStorage.getItem(usersKey)||'[]');
+const testUser={id:'test-account',name:'Тестовый пользователь',email:'test@nashavolna.ru',password:'Test1234!'};
+if(!users.some(u=>u.email===testUser.email)){users.push(testUser);localStorage.setItem(usersKey,JSON.stringify(users));}
 function showAuth(){document.querySelector('#auth').hidden=false;document.querySelector('#app').hidden=true}
 function showApp(u){$('#auth').hidden=true;$('#app').hidden=false;$('#userName').textContent=u.name;$('#userEmail').textContent=u.email;$('#avatar').textContent=(u.name||'A')[0].toUpperCase();render('Главная')}
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');const reg=t.dataset.mode==='register';$('#loginForm').hidden=reg;$('#registerForm').hidden=!reg});
