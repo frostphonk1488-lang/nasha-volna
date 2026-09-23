@@ -1,10 +1,39 @@
-<!doctype html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nasha Volna AI</title><link rel="stylesheet" href="style.css"></head><body>
-<div class="app"><aside class="sidebar"><div class="brand"><strong>✦ Nasha Volna</strong><small>AI SYSTEM</small></div><nav><a class="active">⌂ Главная</a><a>◌ Чат с AI</a><a>✓ Задачи</a><a>▣ Проекты</a><a>▤ Документы</a><a>₽ Финансы</a><a>♙ Клиенты</a><a>♟ Команда</a><a>⚡ Автоматизация</a><a>◈ Аналитика</a></nav><a class="settings">⚙ Настройки</a></aside>
-<main><header><div class="search">⌕ &nbsp; Поиск по системе...</div><div class="actions"><button id="theme">☀</button><button>♧</button><div class="profile"><i>А</i><span><b>Александр</b><small>Генеральный директор</small></span></div></div></header>
-<section class="content"><div class="welcome"><div><label>AI-ПЛАТФОРМА</label><h1>Добро пожаловать, Александр!</h1><p>Ваша AI-система готова к работе.</p></div></div>
-<div class="stats"><article><small>Задачи</small><b>12</b><em>↑ 20% к прошлой неделе</em></article><article><small>Проекты</small><b>5</b><em>2 в активной разработке</em></article><article><small>Доход</small><b>1 250 000 ₽</b><em>↑ 12% к прошлому месяцу</em></article><article><small>Команда</small><b>8</b><em>Все в сети</em></article></div>
-<div class="grid"><article class="panel ai"><h2>✦ &nbsp;AI Ассистент</h2><p>Чем я могу помочь сегодня?</p><div class="buttons"><button>＋ Создать задачу</button><button>◈ Проанализировать данные</button><button>▣ Подготовить отчёт</button><button>⌕ Найти информацию</button><button>✎ Написать письмо</button><button>⚡ Запустить автоматизацию</button></div></article>
-<article class="panel quick"><h2>Быстрые действия</h2><button>＋ Новый проект <span>›</span></button><button>▣ Добавить документ <span>›</span></button><button>₽ Создать счёт <span>›</span></button><button>✦ Запустить AI-агента <span>›</span></button></article></div>
-<div class="grid lower"><article class="panel"><div class="title"><h2>Активные проекты</h2><a>Все →</a></div><div class="project"><i>▣</i><div><b>Сайт для клиента</b><small>Разработка</small><hr><hr class="p70"></div><strong>70%</strong></div><div class="project"><i>◈</i><div><b>AI-бот для продаж</b><small>Проектирование</small><hr><hr class="p45"></div><strong>45%</strong></div><div class="project"><i>↔</i><div><b>Интеграция с 1С</b><small>Планирование</small><hr><hr class="p20"></div><strong>20%</strong></div></article>
-<article class="panel"><div class="title"><h2>Последние уведомления</h2><a>Все →</a></div><div class="notice">● <b>Новый клиент</b><small>ООО «Технологии» оставил заявку · 5 мин назад</small></div><div class="notice">● <b>Обновление проекта</b><small>Изменён статус проекта «AI-бот» · 1 час назад</small></div><div class="notice">● <b>AI-агент завершил задачу</b><small>Сформирован еженедельный отчёт · 3 часа назад</small></div></article></div></section></main></div>
-<script>const b=document.body,t=document.querySelector('#theme');if(localStorage.nvTheme==='light')b.classList.add('light');function icon(){t.textContent=b.classList.contains('light')?'☾':'☀'}icon();t.onclick=()=>{b.classList.toggle('light');localStorage.nvTheme=b.classList.contains('light')?'light':'dark';icon()}</script></body></html>
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nasha Volna AI</title><link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="auth" class="auth-page">
+  <div class="auth-brand">✦ <span>Nasha Volna</span><small>AI SYSTEM</small></div>
+  <div class="auth-card">
+    <div class="auth-tabs"><button class="tab active" data-mode="login">Вход</button><button class="tab" data-mode="register">Регистрация</button></div>
+    <div id="loginForm">
+      <h1>С возвращением</h1><p>Войдите в рабочее пространство Nasha Volna.</p>
+      <label>Email<input id="loginEmail" type="email" placeholder="you@company.ru"></label>
+      <label>Пароль<input id="loginPassword" type="password" placeholder="••••••••"></label>
+      <button class="primary wide" id="loginBtn">Войти</button>
+      <small id="loginMsg" class="msg"></small>
+    </div>
+    <div id="registerForm" hidden>
+      <h1>Создать аккаунт</h1><p>Первый шаг к вашей AI-системе.</p>
+      <label>Имя<input id="regName" placeholder="Александр"></label>
+      <label>Email<input id="regEmail" type="email" placeholder="you@company.ru"></label>
+      <label>Пароль<input id="regPassword" type="password" placeholder="Минимум 6 символов"></label>
+      <button class="primary wide" id="registerBtn">Создать аккаунт</button>
+      <small id="regMsg" class="msg"></small>
+    </div>
+    <div class="security-note">🔒 Демо-авторизация. Для production подключим серверную БД и безопасные сессии.</div>
+  </div>
+</div>
+
+<div id="app" class="app" hidden>
+<aside class="sidebar"><div class="brand"><strong>✦ Nasha Volna</strong><small>AI SYSTEM</small></div>
+<nav>
+<a class="active" data-page="Главная">⌂ Главная</a><a data-page="Чат с AI">◌ Чат с AI</a><a data-page="Задачи">✓ Задачи</a><a data-page="Проекты">▣ Проекты</a><a data-page="Документы">▤ Документы</a><a data-page="Финансы">₽ Финансы</a><a data-page="Клиенты">♙ Клиенты</a><a data-page="Команда">♟ Команда</a><a data-page="Автоматизация">⚡ Автоматизация</a><a data-page="Аналитика">◈ Аналитика</a>
+</nav><a class="settings">⚙ Настройки</a></aside>
+<main><header><div class="search">⌕ &nbsp; Поиск по системе...</div><div class="actions"><button id="theme">☀</button><button id="logout">↪</button><div class="profile"><i id="avatar">А</i><span><b id="userName">Александр</b><small id="userEmail">user@company.ru</small></span></div></div></header>
+<section class="content" id="page"></section></main></div>
+<script src="app.js"></script>
+</body></html>
