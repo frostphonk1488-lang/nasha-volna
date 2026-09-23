@@ -15,6 +15,7 @@ const defaults = {
   ],
   projects: [{id:'p1', name:'Nasha Volna', desc:'AI + память + действия'}],
   clients: [],
+  employees: [],
   docs: []
 };
 
@@ -167,15 +168,39 @@ function process(text){
     return 'Проекты:\n• '+data.projects.map(x=>x.name).join('\n• ');
   }
 
+  if(q.includes('сотрудник') || q.includes('работник') || q.includes('команда')){
+    const count = Array.isArray(data.employees) ? data.employees.length : 0;
+    return count
+      ? 'Сейчас в системе '+count+' сотрудников.\n• '+data.employees.map(x => x.name + (x.role ? ' — '+x.role : '')).join('\n• ')
+      : 'Сейчас в Nasha Volna нет добавленных сотрудников. В системе есть только аккаунт основателя; сотрудников можно будет добавлять после подключения командного режима.';
+  }
+
+  if(q.match(/^(привет|здравствуй|добрый день|доброе утро|добрый вечер|хай|hello|hi)\\b/i)){
+    return 'Привет! Я Nasha Volna AI. Могу работать с памятью, задачами, проектами и клиентами. Что делаем?';
+  }
+
+  if(q.match(/^(ладно|ок|окей|хорошо|понял|понятно|ясно)\\b/i)){
+    return 'Хорошо. Я готов продолжать.';
+  }
+
+  if(q.includes('кто ты') || q.includes('что ты умеешь')){
+    return 'Я Nasha Volna AI. Сейчас я работаю как локальный MVP: храню память, ищу информацию, создаю и закрываю задачи, работаю с проектами и клиентами. Следующий этап — подключение настоящего AI-ядра и серверной памяти.';
+  }
+
+  if(q.includes('сколько') && (q.includes('нас') || q.includes('компани') || q.includes('проект')) && q.includes('сотруд')){
+    const count = Array.isArray(data.employees) ? data.employees.length : 0;
+    return count ? 'В системе указано сотрудников: '+count+'.' : 'В системе пока не указаны сотрудники.';
+  }
+
   if(q.includes('клиент')){
     return data.clients.length ? 'Клиенты:\n• '+data.clients.map(x=>x.name).join('\n• ') : 'Клиентов пока нет.';
   }
 
   if(q.includes('отчёт') || q.includes('отчет')){
-    return 'Краткий отчёт:\n• '+data.projects.length+' проект(а)\n• '+activeTasks()+' активных задач\n• '+data.memories.length+' фактов в памяти\n• '+data.clients.length+' клиентов\n• '+data.docs.length+' документов';
+    return 'Краткий отчёт:\n• '+data.projects.length+' проект(а)\n• '+activeTasks()+' активных задач\n• '+data.memories.length+' фактов в памяти\n• '+data.clients.length+' клиентов\n• '+(Array.isArray(data.employees)?data.employees.length:0)+' сотрудников\n• '+data.docs.length+' документов';
   }
 
-  return 'Я получил запрос. Это локальный MVP: я уже умею запоминать факты, искать по данным, создавать и закрывать задачи, создавать проекты и добавлять клиентов. Следующий этап — настоящее AI-ядро и серверная память.';
+  return 'Я пока не умею надёжно отвечать на такой свободный запрос без подключённой языковой модели. Но я понимаю команды памяти, задач, проектов, клиентов и команды. Например: «Запомни…», «Найди…», «Создай задачу…», «Какие у меня задачи?», «Сколько сотрудников?». Следующий этап — подключить настоящий NVC AI Core, чтобы такие вопросы обрабатывались естественно.';
 }
 
 function renderMemory(p){
