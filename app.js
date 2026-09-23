@@ -118,24 +118,64 @@ function process(text){
     return 'Задача создана: «'+title+'».';
   }
 
+  const doneMatch = t.match(/^(заверши|закрой|выполни)\s+(?:задачу\s*)?(.+)$/i);
+  if(doneMatch){
+    const needle = doneMatch[2].trim().toLowerCase();
+    const task = data.tasks.find(x => x.title.toLowerCase().includes(needle));
+    if(!task) return 'Не нашёл задачу «'+doneMatch[2].trim()+'».';
+    task.status = 'Выполнена';
+    return 'Готово. Задача «'+task.title+'» отмечена как выполненная.';
+  }
+
+  const projectMatch = t.match(/^(создай|добавь)\s+проект\s*[:,-]?\s*(.+)$/i);
+  if(projectMatch){
+    const name = projectMatch[2].trim();
+    data.projects.push({id:uid('project'), name, desc:'Создано через AI'});
+    return 'Проект создан: «'+name+'».';
+  }
+
+  const clientMatch = t.match(/^(добавь|создай)\s+клиента\s*[:,-]?\s*(.+)$/i);
+  if(clientMatch){
+    const name = clientMatch[2].trim();
+    data.clients.push({id:uid('client'), name, contact:''});
+    return 'Клиент добавлен: «'+name+'».';
+  }
+
+  const findMatch = t.match(/^(найди|покажи)\s+(.+)$/i);
+  if(findMatch){
+    const needle = findMatch[2].trim().toLowerCase();
+    const memories = data.memories.filter(x => x.text.toLowerCase().includes(needle));
+    const tasks = data.tasks.filter(x => x.title.toLowerCase().includes(needle));
+    const projects = data.projects.filter(x => (x.name+' '+x.desc).toLowerCase().includes(needle));
+    const found = [];
+    if(memories.length) found.push('Память: '+memories.map(x=>x.text).join('; '));
+    if(tasks.length) found.push('Задачи: '+tasks.map(x=>x.title+' ('+x.status+')').join('; '));
+    if(projects.length) found.push('Проекты: '+projects.map(x=>x.name).join('; '));
+    return found.length ? 'Нашёл:\n• '+found.join('\n• ') : 'Ничего не нашёл по запросу «'+findMatch[2].trim()+'».';
+  }
+
   if(q.includes('задач')){
     if(!activeTasks()) return 'Активных задач нет.';
-    return 'Сейчас у тебя '+activeTasks()+' активных задач:\n• '+data.tasks.filter(x=>x.status!=='Выполнена').map(x=>x.title).join('\n• ');
+    return 'Сейчас у тебя '+activeTasks()+' активных задач:\n• '+data.tasks.filter(x=>x.status!=='Выполнена').map(x=>x.title+' — '+x.status).join('\n• ');
   }
 
   if(q.includes('помни') || q.includes('памят')){
-    return 'Я помню:\n• '+data.memories.slice(-6).map(x=>x.text).join('\n• ');
+    return data.memories.length ? 'Я помню:\n• '+data.memories.slice(-8).map(x=>x.text).join('\n• ') : 'Память пока пуста.';
   }
 
   if(q.includes('проект')){
     return 'Проекты:\n• '+data.projects.map(x=>x.name).join('\n• ');
   }
 
-  if(q.includes('отчёт') || q.includes('отчет')){
-    return 'Краткий отчёт:\n• '+data.projects.length+' проект(а)\n• '+activeTasks()+' активных задач\n• '+data.memories.length+' фактов в памяти\n• '+data.clients.length+' клиентов';
+  if(q.includes('клиент')){
+    return data.clients.length ? 'Клиенты:\n• '+data.clients.map(x=>x.name).join('\n• ') : 'Клиентов пока нет.';
   }
 
-  return 'Я получил запрос. Сейчас это локальный MVP: я могу хранить память, читать её, создавать задачи и работать с данными интерфейса. Следующий этап — подключить настоящее AI-ядро и серверную базу.';
+  if(q.includes('отчёт') || q.includes('отчет')){
+    return 'Краткий отчёт:\n• '+data.projects.length+' проект(а)\n• '+activeTasks()+' активных задач\n• '+data.memories.length+' фактов в памяти\n• '+data.clients.length+' клиентов\n• '+data.docs.length+' документов';
+  }
+
+  return 'Я получил запрос. Это локальный MVP: я уже умею запоминать факты, искать по данным, создавать и закрывать задачи, создавать проекты и добавлять клиентов. Следующий этап — настоящее AI-ядро и серверная память.';
 }
 
 function renderMemory(p){
