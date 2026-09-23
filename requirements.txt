@@ -1,0 +1,1 @@
+# NVC v0.2 currently uses only Python standard library.
