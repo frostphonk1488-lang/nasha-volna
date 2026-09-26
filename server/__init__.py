@@ -1,0 +1,1 @@
+"""Nasha Volna server core."""

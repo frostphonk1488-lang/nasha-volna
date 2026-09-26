@@ -2,8 +2,11 @@
 
 Статический MVP. `index.html` загружает `task-core.js` и `app.js`; данные и контекст
 диалога сохраняются в `localStorage` под прежним ключом `nv_mvp_v2`.
-Сервер, синхронизация между устройствами и языковая модель пока не подключены.
-Python-пакет `core/` — отдельный прототип, он не исполняется на GitHub Pages.
+По умолчанию работает локальный режим. Добавлен серверный режим: интерфейс подключения,
+адаптер модели, постоянная база и планы действий. Для активации нужен отдельный
+запущенный сервер и доступ к модели; см. [server/README.md](server/README.md).
+Python-пакет `core/` — прежний прототип; новый HTTP-сервис находится в `server/`.
+Python не исполняется на GitHub Pages.
 
 ## Задачи через чат
 
@@ -31,6 +34,7 @@ Python-пакет `core/` — отдельный прототип, он не и�
 ```sh
 node --test tests/*.test.cjs
 python -m unittest discover -s core/tests
+python -m unittest discover -s server/tests
 python -m http.server 8765
 ```
 

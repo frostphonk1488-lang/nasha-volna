@@ -31,6 +31,16 @@ function load(){
   } catch(e){ return structuredClone(defaults); }
 }
 const data = load();
+let localSnapshot = null;
+let remoteBusy = false;
+let remoteError = '';
+const remote = () => window.NVRemote;
+const serverMode = () => Boolean(remote()?.connected);
+function adoptRemote(result){
+  for(const key of Object.keys(data)) delete data[key];
+  Object.assign(data, structuredClone(result.state));
+}
+
 const save = () => localStorage.setItem(KEY, JSON.stringify(data));
 const uid = p => p + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -48,12 +58,12 @@ function layout(title, subtitle, body){
 function render(page='AI'){
   const p = $('#page');
   if(!p) return;
-  if(page==='AI') return renderAI(p);
-  if(page==='Память') return renderMemory(p);
-  if(page==='Задачи') return renderTasks(p);
-  if(page==='Проекты') return renderProjects(p);
-  if(page==='Клиенты') return renderClients(p);
-  if(page==='Документы') return renderDocs(p);
+  const pages={'AI':renderAI,'Память':renderMemory,'Задачи':renderTasks,'Проекты':renderProjects,'Клиенты':renderClients,'Документы':renderDocs,'Подключение':renderConnection};
+  if(pages[page]) pages[page](p);
+  if(serverMode() && !['AI','Подключение'].includes(page)){
+    p.querySelectorAll('[data-status],[data-del],#addMemory,#addTask,#addProject,#addClient,#addDoc').forEach(b=>{b.disabled=true;b.title='В серверном режиме изменения доступны через AI с проверкой плана.';});
+    const note=document.createElement('p');note.className='muted';note.textContent='Серверные данные. Изменения — через AI с проверкой плана. Для свежих данных откройте AI → Обновить.';p.prepend(note);
+  }
 }
 
 function renderAI(p){
@@ -66,13 +76,16 @@ function renderAI(p){
     'Один интерфейс для разговора, памяти и действий.',
     '<div class="ai-grid">'+
       '<section class="ai-main panel">'+
-        '<div class="ai-intro"><div class="ai-orb">✦</div><div><h2>Что нужно сделать?</h2><p>Локальное ядро: задачи, сроки и контекст диалога. Данные хранятся в этом браузере.</p></div></div>'+
+        '<div class="ai-intro"><div class="ai-orb">✦</div><div><h2>Что нужно сделать?</h2><p>'+ (serverMode()?'Серверный режим: разговор, память и планы действий.':'Локальное ядро: задачи, сроки и контекст диалога. Данные хранятся в этом браузере.') +'</p></div></div>'+
         '<div id="messages" class="messages">'+
           (recent || '<div class="empty-chat"><span>✦</span><h2>Начните с команды</h2><p>Например: «Запомни, что наш первый продукт — AI с долговременной памятью».</p></div>')+
         '</div>'+
+        remotePlansHTML()+
+        (remoteError?'<p role="alert" class="remote-error">'+esc(remoteError)+'</p>':'')+
         '<div class="composer"><textarea aria-label="Сообщение AI" id="chatInput" placeholder="Напишите команду или вопрос…"></textarea><button id="sendBtn">Отправить <span>↗</span></button></div>'+
       '</section>'+
       '<aside class="context">'+
+        '<section class="panel context-card"><div class="panel-title"><b>'+(serverMode()?'Сервер подключён':'Локальный режим')+'</b></div><p class="muted">'+(serverMode()?'Данные хранятся на подключённом сервере.': 'Для свободного разговора подключите сервер с языковой моделью.')+'</p><button id="connectionBtn" class="secondary">'+(serverMode()?'Подключение':'Подключить AI')+'</button>'+(serverMode()?'<button id="refreshRemote" class="secondary">Обновить</button>':'')+'</section>'+
         '<section class="panel context-card"><div class="panel-title"><b>Память</b><button data-go="Память">Открыть</button></div>'+
           (data.memories.slice(-4).reverse().map(m => '<div class="memory-line"><i>●</i><div><b>'+esc(m.type)+'</b><p>'+esc(m.text)+'</p></div></div>').join('') || '<p class="muted">Память пуста.</p>')+
         '</section>'+
@@ -95,7 +108,8 @@ function renderAI(p){
   const input = $('#chatInput');
   const send = () => {
     const text = input.value.trim();
-    if(!text) return;
+    if(!text || remoteBusy) return;
+    if(serverMode()){sendRemote(text);return;}
     const snapshot = structuredClone(data);
     try {
       data.messages.push({id:uid('m'), role:'user', text});
@@ -114,6 +128,15 @@ function renderAI(p){
     setTimeout(() => { const i=$('#chatInput'); if(i){i.focus(); i.setSelectionRange(i.value.length,i.value.length);} }, 0);
   };
   $('#sendBtn').onclick = send;
+  $('#sendBtn').disabled=remoteBusy;
+  input.disabled=remoteBusy;
+  if(remoteBusy) $('#sendBtn').textContent='Обрабатываю…';
+  const connectionButton=$('#connectionBtn');
+  if(connectionButton) connectionButton.onclick=()=>nav('Подключение');
+  if($('#refreshRemote')) $('#refreshRemote').onclick=()=>remoteRequest(()=>remote().refresh());
+  document.querySelectorAll('[data-plan-confirm]').forEach(b=>b.onclick=()=>remoteRequest(()=>remote().post('/api/plans/'+encodeURIComponent(b.dataset.planConfirm)+'/confirm',{})));
+  document.querySelectorAll('[data-plan-cancel]').forEach(b=>b.onclick=()=>remoteRequest(()=>remote().post('/api/plans/'+encodeURIComponent(b.dataset.planCancel)+'/cancel',{})));
+  document.querySelectorAll('[data-plan-confirm],[data-plan-cancel],#refreshRemote,#connectionBtn').forEach(b=>b.disabled=remoteBusy);
   input.onkeydown = e => { if(e.key==='Enter' && !e.shiftKey){e.preventDefault();send();} };
   document.querySelectorAll('[data-prompt]').forEach(b => b.onclick = () => { input.value=b.dataset.prompt; input.focus(); });
   document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => nav(b.dataset.go));
@@ -209,7 +232,7 @@ function process(text){
 }
 
 function renderMemory(p){
-  p.innerHTML = layout('Память','Сохранённые факты доступны в этом браузере. Между устройствами они пока не синхронизируются.',
+  p.innerHTML = layout('Память',serverMode()?'Факты из подключённого рабочего пространства.':'Сохранённые факты доступны в этом браузере. Между устройствами они пока не синхронизируются.',
     '<section class="panel full"><div class="panel-title"><div><b>Сохранённые факты</b><span class="muted"> '+data.memories.length+' записей</span></div><button class="primary" id="addMemory">＋ Добавить</button></div>'+
     '<div class="records">'+(data.memories.map(m =>
       '<div class="record"><div><span class="tag">'+esc(m.type)+'</span><p>'+esc(m.text)+'</p></div><button data-del="'+m.id+'">Удалить</button></div>'
@@ -222,7 +245,7 @@ function renderMemory(p){
 function renderTasks(p){
   p.innerHTML=layout('Задачи','AI и человек работают с одним списком задач.',
     '<section class="panel full"><div class="panel-title"><b>Все задачи</b><button class="primary" id="addTask">＋ Новая задача</button></div><div class="records">'+
-    (data.tasks.map(x=>'<div class="record"><div><b>'+esc(x.title)+'</b><p>'+esc(x.status)+(x.dueDate?' · Срок: '+esc(x.dueDate):'')+'</p></div><select data-status="'+x.id+'"><option '+(x.status==='Новая'?'selected':'')+'>Новая</option><option '+(x.status==='В работе'?'selected':'')+'>В работе</option><option '+(x.status==='Выполнена'?'selected':'')+'>Выполнена</option></select></div>').join('')||'<div class="empty">Задач нет.</div>')+
+    (data.tasks.map(x=>'<div class="record"><div><b>'+esc(x.title)+'</b><p>'+esc(x.status)+(x.dueDate?' · Срок: '+esc(x.dueDate):'')+(x.projectId?' · Проект: '+esc(data.projects.find(p=>p.id===x.projectId)?.name||x.projectId):'')+'</p></div><select data-status="'+x.id+'"><option '+(x.status==='Новая'?'selected':'')+'>Новая</option><option '+(x.status==='В работе'?'selected':'')+'>В работе</option><option '+(x.status==='Выполнена'?'selected':'')+'>Выполнена</option></select></div>').join('')||'<div class="empty">Задач нет.</div>')+
     '</div></section>');
   $('#addTask').onclick=()=>{const x=prompt('Название задачи');if(x){data.tasks.unshift({id:uid('task'),title:x,status:'Новая'});save();render('Задачи');}};
   document.querySelectorAll('[data-status]').forEach(s=>s.onchange=()=>{const x=data.tasks.find(x=>x.id===s.dataset.status);if(x){x.status=s.value;save();}});
@@ -243,10 +266,55 @@ function renderClients(p){
 }
 
 function renderDocs(p){
-  p.innerHTML=layout('Документы','Следующий этап — поиск по документам через AI.',
+  p.innerHTML=layout('Документы',serverMode()?'AI использует текст этих записей и указывает источники.':'Добавьте текст документа, чтобы затем импортировать его в серверный AI.',
     '<section class="panel full"><div class="panel-title"><b>Документы</b><button class="primary" id="addDoc">＋ Добавить запись</button></div><div class="records">'+
-    (data.docs.map(x=>'<div class="record"><div><b>'+esc(x.name)+'</b><p>'+esc(x.desc)+'</p></div></div>').join('')||'<div class="empty">Документов пока нет.</div>')+'</div></section>');
-  $('#addDoc').onclick=()=>{const x=prompt('Название документа');if(x){data.docs.push({id:uid('d'),name:x,desc:'Запись документа'});save();render('Документы');}};
+    (data.docs.map(x=>'<div class="record"><div><b>'+esc(x.name)+'</b><p>'+esc(x.text||x.desc)+'</p></div></div>').join('')||'<div class="empty">Документов пока нет.</div>')+'</div></section>');
+  $('#addDoc').onclick=()=>{const x=prompt('Название документа');if(x){const body=prompt('Текст документа (до 20 000 символов)')||'';if(body.length>20000){alert('Максимум 20 000 символов.');return;}data.docs.push({id:uid('d'),name:x,text:body,desc:body?'':'Текст пока не добавлен'});save();render('Документы');}};
+}
+
+function remotePlansHTML(){
+  if(!serverMode())return '';
+  const labels={'task.create':'Создать задачу','task.update':'Изменить задачу','memory.save':'Запомнить','memory.update':'Изменить память','memory.delete':'Удалить факт','project.create':'Создать проект','client.create':'Добавить клиента','document.create':'Добавить документ'};
+  return remote().view.plans.map(plan=>'<section class="action-plan"><h3>План изменений</h3><ol>'+plan.actions.map(a=>{
+    const existing=[...data.tasks,...data.memories,...data.projects,...data.docs].find(x=>x.id===a.id);
+    const fields=[a.id?'Запись: '+(existing?.title||existing?.name||existing?.text||a.id):'',a.title?'Название: '+a.title:'',a.text?'Текст: '+a.text:'',a.status?'Статус: '+a.status:'',a.dueDate?'Срок: '+a.dueDate:'',a.projectName?'Проект: '+a.projectName:'',a.projectId?'Проект: '+(data.projects.find(p=>p.id===a.projectId)?.name||a.projectId):''].filter(Boolean);
+    return '<li><b>'+esc(labels[a.kind]||a.kind)+'</b><p>'+fields.map(esc).join('<br>')+'</p></li>';
+  }).join('')+'</ol><p class="muted">Применяется целиком после проверки. План действует один час и до следующего изменения данных.</p><button class="secondary" data-plan-confirm="'+esc(plan.id)+'">Применить план</button><button class="secondary" data-plan-cancel="'+esc(plan.id)+'">Отменить</button></section>').join('');
+}
+async function remoteRequest(operation){
+  if(remoteBusy)return;
+  remoteBusy=true;remoteError='';render('AI');
+  try{adoptRemote(await operation());}
+  catch(error){remoteError=error.message;}
+  finally{remoteBusy=false;render('AI');}
+}
+async function sendRemote(message){
+  await remoteRequest(()=>remote().post('/api/chat',{message}));
+  if(remoteError && $('#chatInput')) $('#chatInput').value=message;
+}
+function renderConnection(p){
+  p.innerHTML=layout('Подключение AI','Локальный режим работает без сервера. Для свободного разговора нужен сервер с подключённой моделью.',
+    '<section class="panel full connection-panel">'+(serverMode()?
+      '<p>Сервер подключён. Ключ доступа хранится только до закрытия или обновления страницы.</p><p>'+(remote().view.modelReady?'Настройки модели заданы. Доступ к API проверяется при отправке сообщения.':'Модель на сервере пока не настроена.')+'</p><button id="disconnectRemote" class="secondary">Вернуться в локальный режим</button><button id="importRemote" class="secondary">Импортировать локальные записи</button><p class="muted">Импорт доступен только в пустую серверную базу. Локальные записи сохраняются; история локального чата не переносится.</p>':
+      '<p>Администратор должен запустить сервер Nasha Volna и выдать ключ рабочего пространства. API-ключ модели хранится на сервере.</p><form id="connectForm"><label>Адрес сервера<input id="serverUrl" type="url" placeholder="https://ai.example.ru" required></label><label>Ключ рабочего пространства<input id="workspaceToken" type="password" autocomplete="off" required></label><p class="muted">Разговоры и импортированные записи будут передаваться на указанный сервер, а контекст запросов — подключённому поставщику модели. Используйте свой доверенный сервер.</p><button class="secondary" type="submit">Подключить</button></form>')+
+      '<p id="connectStatus" role="status"></p><button id="backToAI" class="secondary">Вернуться к чату</button></section>');
+  $('#backToAI').onclick=()=>nav('AI');
+  if(serverMode()){
+    $('#disconnectRemote').onclick=()=>{remote().disconnect();for(const k of Object.keys(data))delete data[k];Object.assign(data,localSnapshot||load());localSnapshot=null;remoteError='';nav('AI');};
+    $('#importRemote').onclick=()=>remoteRequest(()=>remote().post('/api/import',{data:localSnapshot||load()}));
+    $('#importRemote').disabled=remote().view.revision!==0;
+  }else{
+    const form=$('#connectForm');
+    form.onsubmit=async event=>{
+      event.preventDefault();
+      const button=form.querySelector('button');button.disabled=true;
+      $('#connectStatus').textContent='Подключаюсь…';
+      try{
+        const result=await remote().connect($('#serverUrl').value,$('#workspaceToken').value);
+        localSnapshot=structuredClone(data);adoptRemote(result);remoteError='';nav('AI');
+      }catch(error){$('#connectStatus').textContent=error.message;button.disabled=false;}
+    };
+  }
 }
 
 document.querySelectorAll('nav a').forEach(a=>a.onclick=()=>nav(a.dataset.page));
