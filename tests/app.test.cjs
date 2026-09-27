@@ -12,6 +12,7 @@ function boot(initial,remoteApi){
   const context={document,localStorage:{getItem:key=>store.get(key)||null,setItem:(key,value)=>{if(fail)throw Error('quota');store.set(key,value);}},structuredClone,setTimeout:fn=>fn(),console};
   context.window=context;context.NVRemote=remoteApi;
   vm.createContext(context);
+  vm.runInContext(fs.readFileSync('workspace-core.js','utf8'),context);
   vm.runInContext(fs.readFileSync('task-core.js','utf8'),context);
   vm.runInContext(fs.readFileSync('app.js','utf8'),context);
   return {store,alerts,elements,document,fail:()=>{fail=true;},recover:()=>{fail=false;},send:text=>{elements['#chatInput'].value=text;elements['#sendBtn'].onclick();}};
@@ -62,4 +63,27 @@ test('server mode uses remote state without overwriting local records; disconnec
   app.send('Покажи задачи');
   assert.match(app.elements['#page'].innerHTML,/Локальная задача/);
   assert.doesNotMatch(app.elements['#page'].innerHTML,/Серверная задача/);
+});
+
+test('project and task forms persist links, deadlines and chat overview',()=>{
+  const app=boot({projects:[],tasks:[]});
+  app.elements['#overviewBtn'].onclick();app.elements['#openProjects'].onclick();app.elements['#addProject'].onclick();
+  app.document.querySelector('#projectName').value='Новый продукт';app.document.querySelector('#projectDescription').value='Проверка идеи';
+  app.elements['#projectForm'].onsubmit({preventDefault(){}});
+  const project=JSON.parse(app.store.get('nv_mvp_v2')).projects[0];
+  app.elements['#projectTask'].onclick();
+  for(const [key,value] of Object.entries({taskTitle:'Интервью',taskDue:'2026-10-01',taskStatus:'Новая',taskProject:project.id}))app.document.querySelector('#'+key).value=value;
+  app.elements['#taskForm'].onsubmit({preventDefault(){}});
+  const task=JSON.parse(app.store.get('nv_mvp_v2')).tasks[0];
+  assert.equal(task.projectId,project.id);assert.equal(task.dueDate,'2026-10-01');
+  const restored=boot(JSON.parse(app.store.get('nv_mvp_v2')));restored.send('Обзор проекта Новый продукт');
+  assert.match(restored.elements['#page'].innerHTML,/Интервью/);
+});
+test('task form storage failure leaves no phantom task',()=>{
+  const app=boot({tasks:[]});app.elements['#overviewBtn'].onclick();app.elements['#newOverviewTask'].onclick();
+  for(const [key,value] of Object.entries({taskTitle:'Не сохранится',taskDue:'',taskStatus:'Новая',taskProject:''}))app.document.querySelector('#'+key).value=value;
+  app.fail();app.elements['#taskForm'].onsubmit({preventDefault(){}});
+  assert.match(app.elements['#formError'].textContent,/не сохранены/);
+  app.recover();app.elements['#taskForm'].onsubmit({preventDefault(){}});
+  assert.equal(JSON.parse(app.store.get('nv_mvp_v2')).tasks.length,1);
 });

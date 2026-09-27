@@ -58,7 +58,7 @@ function layout(title, subtitle, body){
 function render(page='AI'){
   const p = $('#page');
   if(!p) return;
-  const pages={'AI':renderAI,'Память':renderMemory,'Задачи':renderTasks,'Проекты':renderProjects,'Клиенты':renderClients,'Документы':renderDocs,'Подключение':renderConnection};
+  const pages={'Обзор':renderOverview,'AI':renderAI,'Память':renderMemory,'Задачи':renderTasks,'Проекты':renderProjects,'Клиенты':renderClients,'Документы':renderDocs,'Подключение':renderConnection};
   if(pages[page]) pages[page](p);
   if(serverMode() && !['AI','Подключение'].includes(page)){
     p.querySelectorAll('[data-status],[data-del],#addMemory,#addTask,#addProject,#addClient,#addDoc').forEach(b=>{b.disabled=true;b.title='В серверном режиме изменения доступны через AI с проверкой плана.';});
@@ -95,6 +95,8 @@ function renderAI(p){
           '<div class="metric"><span>Факты в памяти</span><strong>'+data.memories.length+'</strong></div>'+
         '</section>'+
         '<section class="panel context-card quick-commands"><div class="panel-title"><b>Примеры</b></div>'+
+          '<button id="overviewBtn">Рабочий обзор</button>'+
+          '<button data-prompt="План на сегодня">План на сегодня</button>'+
           '<button data-prompt="Какие у меня задачи?">Какие у меня задачи?</button>'+
           '<button data-prompt="Что ты помнишь?">Что ты помнишь?</button>'+
           '<button data-prompt="Создай задачу: проверить MVP">Создай задачу</button>'+
@@ -103,6 +105,7 @@ function renderAI(p){
     '</div>'
   );
 
+  $('#overviewBtn').onclick=()=>nav('Обзор');
   const messages = $('#messages');
   messages.scrollTop = messages.scrollHeight;
   const input = $('#chatInput');
@@ -143,6 +146,8 @@ function renderAI(p){
 }
 
 function process(text){
+  const workspaceAnswer=window.NVWorkspace?.answer(text,data);
+  if(workspaceAnswer!==null && workspaceAnswer!==undefined)return workspaceAnswer;
   if (!window.NVTaskCore) return 'Не удалось загрузить ядро задач. Обновите страницу и попробуйте снова.';
   const taskResult = window.NVTaskCore.handle(text, data, uid);
   if (taskResult) return taskResult.message;
@@ -243,19 +248,33 @@ function renderMemory(p){
 }
 
 function renderTasks(p){
-  p.innerHTML=layout('Задачи','AI и человек работают с одним списком задач.',
-    '<section class="panel full"><div class="panel-title"><b>Все задачи</b><button class="primary" id="addTask">＋ Новая задача</button></div><div class="records">'+
-    (data.tasks.map(x=>'<div class="record"><div><b>'+esc(x.title)+'</b><p>'+esc(x.status)+(x.dueDate?' · Срок: '+esc(x.dueDate):'')+(x.projectId?' · Проект: '+esc(data.projects.find(p=>p.id===x.projectId)?.name||x.projectId):'')+'</p></div><select data-status="'+x.id+'"><option '+(x.status==='Новая'?'selected':'')+'>Новая</option><option '+(x.status==='В работе'?'selected':'')+'>В работе</option><option '+(x.status==='Выполнена'?'selected':'')+'>Выполнена</option></select></div>').join('')||'<div class="empty">Задач нет.</div>')+
-    '</div></section>');
-  $('#addTask').onclick=()=>{const x=prompt('Название задачи');if(x){data.tasks.unshift({id:uid('task'),title:x,status:'Новая'});save();render('Задачи');}};
-  document.querySelectorAll('[data-status]').forEach(s=>s.onchange=()=>{const x=data.tasks.find(x=>x.id===s.dataset.status);if(x){x.status=s.value;save();}});
+  const s=window.NVWorkspace.inspect(data);
+  const groups={all:s.tasks,active:s.active,overdue:s.overdue,today:s.dueToday,unscheduled:s.unscheduled,done:s.done};
+  const tasks=(groups[taskFilter]||s.tasks).filter(t=>!taskProject||t.projectId===taskProject);
+  const labels={all:'Все',active:'Активные',overdue:'Просрочены',today:'Срок сегодня',unscheduled:'Без срока',done:'Выполнены'};
+  p.innerHTML=layout('Задачи','Проекты, сроки и статусы в одном списке.',
+    '<section class="panel full"><div class="panel-title"><b>Задачи · '+tasks.length+'</b><button class="primary" id="addTask">＋ Новая задача</button></div><div class="filters"><label>Статус и срок<select id="filterTasks">'+Object.entries(labels).map(([key,label])=>'<option value="'+key+'" '+(taskFilter===key?'selected':'')+'>'+label+'</option>').join('')+'</select></label><label>Проект<select id="filterProjects"><option value="">Все проекты</option>'+data.projects.map(x=>'<option value="'+esc(x.id)+'" '+(taskProject===x.id?'selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select></label></div>'+taskRows(tasks)+'</section>');
+  $('#addTask').onclick=()=>editTask(null,taskProject);
+  $('#filterTasks').onchange=e=>{taskFilter=e.target.value;render('Задачи');};
+  $('#filterProjects').onchange=e=>{taskProject=e.target.value;render('Задачи');};
+  bindTaskEditors();
 }
-
 function renderProjects(p){
-  p.innerHTML=layout('Проекты','Контекст, вокруг которого AI сможет строить работу.',
-    '<section class="panel full"><div class="panel-title"><b>Проекты</b><button class="primary" id="addProject">＋ Новый проект</button></div><div class="records">'+
-    data.projects.map(x=>'<div class="record"><div><b>'+esc(x.name)+'</b><p>'+esc(x.desc)+'</p></div></div>').join('')+'</div></section>');
-  $('#addProject').onclick=()=>{const x=prompt('Название проекта');if(x){data.projects.push({id:uid('p'),name:x,desc:'Новый проект'});save();render('Проекты');}};
+  const project=data.projects.find(x=>x.id===selectedProjectId);
+  if(project){
+    const s=window.NVWorkspace.inspect(data,new Date(),project.id);
+    p.innerHTML=layout(esc(project.name),esc(project.desc||'Цель проекта пока не указана.'),
+      '<section class="panel full"><div class="panel-title"><b>'+s.done.length+' из '+s.tasks.length+' задач выполнено</b><button id="allProjects">Все проекты</button></div><p>'+s.overdue.length+' просрочено · '+s.unscheduled.length+' без срока</p><progress max="'+Math.max(1,s.tasks.length)+'" value="'+s.done.length+'" aria-label="Прогресс проекта"></progress><div><button class="secondary" id="projectTask" '+(serverMode()?'disabled':'')+'>Добавить задачу</button><button class="secondary" id="reviewProject">Обзор в чате</button></div>'+taskRows(s.tasks)+'</section>');
+    $('#allProjects').onclick=()=>{selectedProjectId=null;render('Проекты');};
+    $('#projectTask').onclick=()=>editTask(null,project.id);
+    $('#reviewProject').onclick=()=>{nav('AI');$('#chatInput').value='Обзор проекта '+project.name;$('#chatInput').focus();};
+    bindTaskEditors();return;
+  }
+  p.innerHTML=layout('Проекты','Прогресс и сроки по связанным задачам.',
+    '<section class="panel full"><div class="panel-title"><b>Проекты · '+data.projects.length+'</b><button class="primary" id="addProject">＋ Новый проект</button></div><div class="project-cards">'+
+    (data.projects.map(x=>{const s=window.NVWorkspace.inspect(data,new Date(),x.id);return '<button class="project-card" data-project="'+esc(x.id)+'"><b>'+esc(x.name)+'</b><p>'+esc(x.desc||'Цель пока не указана')+'</p><span>'+s.done.length+' / '+s.tasks.length+' выполнено</span><progress aria-label="Выполненные задачи" max="'+Math.max(1,s.tasks.length)+'" value="'+s.done.length+'"></progress><small>'+(s.overdue.length?s.overdue.length+' просрочено':s.tasks.length?'Просроченных задач нет':'Добавьте первую задачу')+'</small></button>';}).join('')||'<p class="empty">Создайте проект и соберите его задачи в одном месте.</p>')+'</div></section>');
+  $('#addProject').onclick=editProject;
+  document.querySelectorAll('[data-project]').forEach(b=>b.onclick=()=>{selectedProjectId=b.dataset.project;render('Проекты');});
 }
 
 function renderClients(p){
@@ -315,6 +334,70 @@ function renderConnection(p){
       }catch(error){$('#connectStatus').textContent=error.message;button.disabled=false;}
     };
   }
+}
+
+let selectedProjectId=null;
+let taskFilter='all';
+let taskProject='';
+function projectOptions(selected=''){
+  return '<option value="">Без проекта</option>'+data.projects.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===selected?'selected':'')+'>'+esc(x.name)+'</option>').join('');
+}
+function localChange(change,after){
+  if(serverMode())return;
+  const snapshot=structuredClone(data);
+  try{change();save();}
+  catch(error){
+    for(const key of Object.keys(data))delete data[key];Object.assign(data,snapshot);
+    const message='Изменения не сохранены. '+(error.name==='QuotaExceededError'?'Хранилище браузера заполнено.':error.message);
+    if($('#formError'))$('#formError').textContent=message;
+    return;
+  }
+  after();
+}
+function taskRows(tasks){
+  const date=window.NVWorkspace.today();
+  return tasks.map(t=>'<div class="record"><div><b>'+esc(t.title)+'</b><p>'+esc(t.status)+' · '+esc(window.NVWorkspace.reason(t,date))+(t.projectId?' · '+esc(data.projects.find(p=>p.id===t.projectId)?.name||'Проект не найден'):'')+'</p></div><button data-edit-task="'+esc(t.id)+'" '+(serverMode()?'disabled':'')+'>Изменить</button></div>').join('')||'<div class="empty">Задач в этом списке нет.</div>';
+}
+function bindTaskEditors(){document.querySelectorAll('[data-edit-task]').forEach(b=>b.onclick=()=>editTask(b.dataset.editTask));}
+function editTask(id=null,projectId=''){
+  if(serverMode())return;
+  const current=id?data.tasks.find(t=>t.id===id):null;
+  if(id&&!current)return;
+  const t=current||{title:'',status:'Новая',projectId,dueDate:''};
+  const p=$('#page');
+  p.innerHTML=layout(id?'Изменить задачу':'Новая задача','Срок, проект и статус сохраняются вместе.',
+    '<section class="panel full connection-panel"><form id="taskForm"><label>Название<input id="taskTitle" maxlength="300" required value="'+esc(t.title)+'"></label><div class="form-grid"><label>Срок по Москве<input type="date" id="taskDue" value="'+esc(t.dueDate||'')+'"></label><label>Статус<select id="taskStatus">'+['Новая','В работе','Выполнена'].map(v=>'<option '+(v===t.status?'selected':'')+'>'+v+'</option>').join('')+'</select></label></div><label>Проект<select id="taskProject">'+projectOptions(t.projectId)+'</select></label><p id="formError" role="alert"></p><button class="secondary" type="submit">Сохранить задачу</button><button class="secondary" id="cancelTask" type="button">Отмена</button></form></section>');
+  $('#cancelTask').onclick=()=>nav('Задачи');
+  $('#taskForm').onsubmit=e=>{e.preventDefault();localChange(()=>{
+    const values=window.NVWorkspace.validateTask({title:$('#taskTitle').value,status:$('#taskStatus').value,dueDate:$('#taskDue').value,projectId:$('#taskProject').value},data,id);
+    const record={...(current||{}),...values,id:id||uid('task'),updatedAt:new Date().toISOString()};
+    if(!values.dueDate)delete record.dueDate;if(!values.projectId)delete record.projectId;
+    if(current)data.tasks[data.tasks.findIndex(x=>x.id===id)]=record;else data.tasks.unshift(record);
+    data.taskContext={lastId:record.id,pending:null};
+  },()=>{taskFilter='all';taskProject='';nav('Задачи');});};
+}
+function renderOverview(p){
+  const s=window.NVWorkspace.inspect(data);
+  const metric=(n,label,filter)=>'<button class="panel overview-metric" data-filter="'+filter+'"><strong>'+n+'</strong><span>'+label+'</span></button>';
+  p.innerHTML=layout('Рабочий обзор','Состояние задач на '+s.date+' · Москва · '+(serverMode()?'снимок серверных данных':'данные этого браузера'),
+    '<div class="overview-metrics">'+metric(s.active.length,'Активные','active')+metric(s.overdue.length,'Просрочены','overdue')+metric(s.dueToday.length,'Срок сегодня','today')+metric(s.unscheduled.length,'Без срока','unscheduled')+'</div>'+
+    '<div class="overview-grid"><section class="panel full"><div class="panel-title"><b>С чего начать</b><button id="dailyPlan">Объяснить порядок</button></div><p class="muted">Сначала просрочки, затем срок сегодня, работа в процессе и ближайшие сроки. Длительность задач пока не учитывается.</p>'+taskRows(s.ordered.slice(0,5))+'</section><section class="panel full"><div class="panel-title"><b>Нужно уточнить</b></div><p>'+s.unscheduled.length+' активных задач без корректного срока.</p><p>'+s.unlinked.length+' активных задач не связаны с существующим проектом.</p><p class="muted">Без этих данных обзор не показывает полную картину работы.</p><button class="secondary" id="openProjects">Открыть проекты</button><button class="secondary" id="newOverviewTask" '+(serverMode()?'disabled':'')+'>Новая задача</button></section></div>');
+  document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{taskFilter=b.dataset.filter;taskProject='';nav('Задачи');});
+  $('#dailyPlan').onclick=()=>{nav('AI');$('#chatInput').value='План на сегодня';$('#chatInput').focus();};
+  $('#openProjects').onclick=()=>{selectedProjectId=null;nav('Проекты');};
+  $('#newOverviewTask').onclick=()=>editTask();bindTaskEditors();
+}
+function editProject(){
+  if(serverMode())return;
+  $('#page').innerHTML=layout('Новый проект','Задайте название и цель, затем добавьте задачи.',
+    '<section class="panel full connection-panel"><form id="projectForm"><label>Название<input id="projectName" maxlength="300" required></label><label>Цель проекта<textarea id="projectDescription" maxlength="2000" rows="4"></textarea></label><p id="formError" role="alert"></p><button type="submit" class="secondary">Создать проект</button><button type="button" id="cancelProject" class="secondary">Отмена</button></form></section>');
+  $('#cancelProject').onclick=()=>nav('Проекты');
+  $('#projectForm').onsubmit=e=>{e.preventDefault();localChange(()=>{
+    const name=$('#projectName').value.trim();if(!name||name.length>300)throw Error('Укажите название до 300 символов.');
+    if(data.projects.some(x=>x.name.toLocaleLowerCase('ru')===name.toLocaleLowerCase('ru')))throw Error('Проект с таким названием уже существует.');
+    const desc=$('#projectDescription').value.trim();if(desc.length>2000)throw Error('Описание слишком длинное.');
+    selectedProjectId=uid('project');data.projects.push({id:selectedProjectId,name,desc});
+  },()=>nav('Проекты'));};
 }
 
 document.querySelectorAll('nav a').forEach(a=>a.onclick=()=>nav(a.dataset.page));
