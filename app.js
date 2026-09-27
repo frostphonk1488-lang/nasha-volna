@@ -31,6 +31,9 @@ function load(){
   } catch(e){ return structuredClone(defaults); }
 }
 const data = load();
+const storage=window.NVStorage.open(localStorage,KEY);
+let savedSnapshot=structuredClone(data);
+const icon=window.NVIcon;
 let localSnapshot = null;
 let remoteBusy = false;
 let remoteError = '';
@@ -41,7 +44,7 @@ function adoptRemote(result){
   Object.assign(data, structuredClone(result.state));
 }
 
-const save = () => localStorage.setItem(KEY, JSON.stringify(data));
+const save = (label='Изменение рабочих записей') => {storage.commit(data,label,savedSnapshot);savedSnapshot=structuredClone(data);};
 const uid = p => p + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const activeTasks = () => data.tasks.filter(x => x.status !== 'Выполнена').length;
@@ -58,7 +61,7 @@ function layout(title, subtitle, body){
 function render(page='AI'){
   const p = $('#page');
   if(!p) return;
-  const pages={'Обзор':renderOverview,'AI':renderAI,'Память':renderMemory,'Задачи':renderTasks,'Проекты':renderProjects,'Клиенты':renderClients,'Документы':renderDocs,'Подключение':renderConnection};
+  const pages={'Обзор':renderOverview,'AI':renderAI,'Память':renderMemory,'Задачи':renderTasks,'Проекты':renderProjects,'Клиенты':renderClients,'Документы':renderDocs,'Подключение':renderConnection,'Поиск':renderSearch,'Данные':renderData};
   if(pages[page]) pages[page](p);
   if(serverMode() && !['AI','Подключение'].includes(page)){
     p.querySelectorAll('[data-status],[data-del],#addMemory,#addTask,#addProject,#addClient,#addDoc').forEach(b=>{b.disabled=true;b.title='В серверном режиме изменения доступны через AI с проверкой плана.';});
@@ -68,7 +71,7 @@ function render(page='AI'){
 
 function renderAI(p){
   const recent = data.messages.slice(-100).map(m =>
-    '<div class="message '+m.role+'"><div class="bubble">'+esc(m.text).replace(/\n/g,'<br>')+'</div></div>'
+    '<div class="message '+(m.role==='user'?'user':'assistant')+'"><div class="bubble">'+esc(m.text).replace(/\n/g,'<br>')+'</div></div>'
   ).join('');
 
   p.innerHTML = layout(
@@ -76,13 +79,13 @@ function renderAI(p){
     'Один интерфейс для разговора, памяти и действий.',
     '<div class="ai-grid">'+
       '<section class="ai-main panel">'+
-        '<div class="ai-intro"><div class="ai-orb">✦</div><div><h2>Что нужно сделать?</h2><p>'+ (serverMode()?'Серверный режим: разговор, память и планы действий.':'Локальное ядро: задачи, сроки и контекст диалога. Данные хранятся в этом браузере.') +'</p></div></div>'+
+        '<div class="ai-intro"><div class="ai-orb">'+icon('ai')+'</div><div><h2>Что нужно сделать?</h2><p>'+ (serverMode()?'Серверный режим: разговор, память и планы действий.':'Локальное ядро: задачи, сроки и контекст диалога. Данные хранятся в этом браузере.') +'</p></div></div>'+
         '<div id="messages" class="messages">'+
-          (recent || '<div class="empty-chat"><span>✦</span><h2>Начните с команды</h2><p>Например: «Запомни, что наш первый продукт — AI с долговременной памятью».</p></div>')+
+          (recent || '<div class="empty-chat"><span>'+icon('wave')+'</span><h2>Начните с команды</h2><p>Например: «Запомни, что наш первый продукт — AI с долговременной памятью».</p></div>')+
         '</div>'+
         remotePlansHTML()+
         (remoteError?'<p role="alert" class="remote-error">'+esc(remoteError)+'</p>':'')+
-        '<div class="composer"><textarea aria-label="Сообщение AI" id="chatInput" placeholder="Напишите команду или вопрос…"></textarea><button id="sendBtn">Отправить <span>↗</span></button></div>'+
+        '<div class="composer"><textarea aria-label="Сообщение AI" id="chatInput" placeholder="Напишите команду или вопрос…"></textarea><button id="sendBtn">Отправить '+icon('arrow')+'</button></div>'+
       '</section>'+
       '<aside class="context">'+
         '<section class="panel context-card"><div class="panel-title"><b>'+(serverMode()?'Сервер подключён':'Локальный режим')+'</b></div><p class="muted">'+(serverMode()?'Данные хранятся на подключённом сервере.': 'Для свободного разговора подключите сервер с языковой моделью.')+'</p><button id="connectionBtn" class="secondary">'+(serverMode()?'Подключение':'Подключить AI')+'</button>'+(serverMode()?'<button id="refreshRemote" class="secondary">Обновить</button>':'')+'</section>'+
@@ -117,13 +120,13 @@ function renderAI(p){
     try {
       data.messages.push({id:uid('m'), role:'user', text});
       data.messages.push({id:uid('m'), role:'assistant', text:process(text)});
-      save();
+      save('Диалог и действия AI');
     } catch (error) {
       for (const key of Object.keys(data)) delete data[key];
       Object.assign(data, snapshot);
       const notice = document.createElement('p');
       notice.setAttribute('role', 'alert');
-      notice.textContent = 'Не удалось сохранить изменения. Действие отменено. Проверьте доступность хранилища браузера и попробуйте снова.';
+      notice.textContent = 'Не удалось сохранить изменения. Действие отменено. '+error.message;
       input.parentElement.appendChild(notice);
       return;
     }
@@ -238,13 +241,13 @@ function process(text){
 
 function renderMemory(p){
   p.innerHTML = layout('Память',serverMode()?'Факты из подключённого рабочего пространства.':'Сохранённые факты доступны в этом браузере. Между устройствами они пока не синхронизируются.',
-    '<section class="panel full"><div class="panel-title"><div><b>Сохранённые факты</b><span class="muted"> '+data.memories.length+' записей</span></div><button class="primary" id="addMemory">＋ Добавить</button></div>'+
+    '<section class="panel full"><div class="panel-title"><div><b>Сохранённые факты</b><span class="muted"> '+data.memories.length+' записей</span></div><button class="primary" id="addMemory">'+icon('plus')+' Добавить</button></div>'+
     '<div class="records">'+(data.memories.map(m =>
-      '<div class="record"><div><span class="tag">'+esc(m.type)+'</span><p>'+esc(m.text)+'</p></div><button data-del="'+m.id+'">Удалить</button></div>'
+      '<div class="record"><div><span class="tag">'+esc(m.type)+'</span><p>'+esc(m.text)+'</p></div><button data-del="'+esc(m.id)+'">Удалить</button></div>'
     ).join('') || '<div class="empty">Память пока пуста.</div>')+'</div></section>'
   );
-  $('#addMemory').onclick=()=>{const x=prompt('Что AI должен запомнить?');if(x){data.memories.push({id:uid('mem'),type:'Факт',text:x});save();render('Память');}};
-  document.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{data.memories=data.memories.filter(x=>x.id!==b.dataset.del);save();render('Память');});
+  $('#addMemory').onclick=()=>{const x=prompt('Что AI должен запомнить?');if(x)localChange(()=>data.memories.push({id:uid('mem'),type:'Факт',text:x}),()=>render('Память'),'Добавлен факт');};
+  document.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>localChange(()=>{data.memories=data.memories.filter(x=>x.id!==b.dataset.del);},()=>render('Память'),'Удалён факт'));
 }
 
 function renderTasks(p){
@@ -253,7 +256,7 @@ function renderTasks(p){
   const tasks=(groups[taskFilter]||s.tasks).filter(t=>!taskProject||t.projectId===taskProject);
   const labels={all:'Все',active:'Активные',overdue:'Просрочены',today:'Срок сегодня',unscheduled:'Без срока',done:'Выполнены'};
   p.innerHTML=layout('Задачи','Проекты, сроки и статусы в одном списке.',
-    '<section class="panel full"><div class="panel-title"><b>Задачи · '+tasks.length+'</b><button class="primary" id="addTask">＋ Новая задача</button></div><div class="filters"><label>Статус и срок<select id="filterTasks">'+Object.entries(labels).map(([key,label])=>'<option value="'+key+'" '+(taskFilter===key?'selected':'')+'>'+label+'</option>').join('')+'</select></label><label>Проект<select id="filterProjects"><option value="">Все проекты</option>'+data.projects.map(x=>'<option value="'+esc(x.id)+'" '+(taskProject===x.id?'selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select></label></div>'+taskRows(tasks)+'</section>');
+    '<section class="panel full"><div class="panel-title"><b>Задачи · '+tasks.length+'</b><button class="primary" id="addTask">'+icon('plus')+' Новая задача</button></div><div class="filters"><label>Статус и срок<select id="filterTasks">'+Object.entries(labels).map(([key,label])=>'<option value="'+key+'" '+(taskFilter===key?'selected':'')+'>'+label+'</option>').join('')+'</select></label><label>Проект<select id="filterProjects"><option value="">Все проекты</option>'+data.projects.map(x=>'<option value="'+esc(x.id)+'" '+(taskProject===x.id?'selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select></label></div>'+taskRows(tasks)+'</section>');
   $('#addTask').onclick=()=>editTask(null,taskProject);
   $('#filterTasks').onchange=e=>{taskFilter=e.target.value;render('Задачи');};
   $('#filterProjects').onchange=e=>{taskProject=e.target.value;render('Задачи');};
@@ -271,7 +274,7 @@ function renderProjects(p){
     bindTaskEditors();return;
   }
   p.innerHTML=layout('Проекты','Прогресс и сроки по связанным задачам.',
-    '<section class="panel full"><div class="panel-title"><b>Проекты · '+data.projects.length+'</b><button class="primary" id="addProject">＋ Новый проект</button></div><div class="project-cards">'+
+    '<section class="panel full"><div class="panel-title"><b>Проекты · '+data.projects.length+'</b><button class="primary" id="addProject">'+icon('plus')+' Новый проект</button></div><div class="project-cards">'+
     (data.projects.map(x=>{const s=window.NVWorkspace.inspect(data,new Date(),x.id);return '<button class="project-card" data-project="'+esc(x.id)+'"><b>'+esc(x.name)+'</b><p>'+esc(x.desc||'Цель пока не указана')+'</p><span>'+s.done.length+' / '+s.tasks.length+' выполнено</span><progress aria-label="Выполненные задачи" max="'+Math.max(1,s.tasks.length)+'" value="'+s.done.length+'"></progress><small>'+(s.overdue.length?s.overdue.length+' просрочено':s.tasks.length?'Просроченных задач нет':'Добавьте первую задачу')+'</small></button>';}).join('')||'<p class="empty">Создайте проект и соберите его задачи в одном месте.</p>')+'</div></section>');
   $('#addProject').onclick=editProject;
   document.querySelectorAll('[data-project]').forEach(b=>b.onclick=()=>{selectedProjectId=b.dataset.project;render('Проекты');});
@@ -279,16 +282,16 @@ function renderProjects(p){
 
 function renderClients(p){
   p.innerHTML=layout('Клиенты','Будущая база контекста для AI.',
-    '<section class="panel full"><div class="panel-title"><b>Клиенты</b><button class="primary" id="addClient">＋ Добавить</button></div><div class="records">'+
+    '<section class="panel full"><div class="panel-title"><b>Клиенты</b><button class="primary" id="addClient">'+icon('plus')+' Добавить</button></div><div class="records">'+
     (data.clients.map(x=>'<div class="record"><div><b>'+esc(x.name)+'</b><p>'+esc(x.contact||'Контакт не указан')+'</p></div></div>').join('')||'<div class="empty">Пока нет клиентов.</div>')+'</div></section>');
-  $('#addClient').onclick=()=>{const x=prompt('Имя или название клиента');if(x){const c=prompt('Контакт')||'';data.clients.push({id:uid('c'),name:x,contact:c});save();render('Клиенты');}};
+  $('#addClient').onclick=()=>{const x=prompt('Имя или название клиента');if(x){const c=prompt('Контакт')||'';localChange(()=>data.clients.push({id:uid('c'),name:x,contact:c}),()=>render('Клиенты'),'Добавлен клиент');}};
 }
 
 function renderDocs(p){
   p.innerHTML=layout('Документы',serverMode()?'AI использует текст этих записей и указывает источники.':'Добавьте текст документа, чтобы затем импортировать его в серверный AI.',
-    '<section class="panel full"><div class="panel-title"><b>Документы</b><button class="primary" id="addDoc">＋ Добавить запись</button></div><div class="records">'+
+    '<section class="panel full"><div class="panel-title"><b>Документы</b><button class="primary" id="addDoc">'+icon('plus')+' Добавить запись</button></div><div class="records">'+
     (data.docs.map(x=>'<div class="record"><div><b>'+esc(x.name)+'</b><p>'+esc(x.text||x.desc)+'</p></div></div>').join('')||'<div class="empty">Документов пока нет.</div>')+'</div></section>');
-  $('#addDoc').onclick=()=>{const x=prompt('Название документа');if(x){const body=prompt('Текст документа (до 20 000 символов)')||'';if(body.length>20000){alert('Максимум 20 000 символов.');return;}data.docs.push({id:uid('d'),name:x,text:body,desc:body?'':'Текст пока не добавлен'});save();render('Документы');}};
+  $('#addDoc').onclick=()=>{const x=prompt('Название документа');if(x){const body=prompt('Текст документа (до 20 000 символов)')||'';if(body.length>20000){alert('Максимум 20 000 символов.');return;}localChange(()=>data.docs.push({id:uid('d'),name:x,text:body,desc:body?'':'Текст пока не добавлен'}),()=>render('Документы'),'Добавлен документ');}};
 }
 
 function remotePlansHTML(){
@@ -342,14 +345,14 @@ let taskProject='';
 function projectOptions(selected=''){
   return '<option value="">Без проекта</option>'+data.projects.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===selected?'selected':'')+'>'+esc(x.name)+'</option>').join('');
 }
-function localChange(change,after){
+function localChange(change,after,label='Изменение задач или проектов'){
   if(serverMode())return;
   const snapshot=structuredClone(data);
-  try{change();save();}
+  try{change();save(label);}
   catch(error){
     for(const key of Object.keys(data))delete data[key];Object.assign(data,snapshot);
     const message='Изменения не сохранены. '+(error.name==='QuotaExceededError'?'Хранилище браузера заполнено.':error.message);
-    if($('#formError'))$('#formError').textContent=message;
+    if($('#formError'))$('#formError').textContent=message;else showError(message);
     return;
   }
   after();
@@ -400,9 +403,42 @@ function editProject(){
   },()=>nav('Проекты'));};
 }
 
-document.querySelectorAll('nav a').forEach(a=>a.onclick=()=>nav(a.dataset.page));
+function showError(message){const notice=document.createElement('p');notice.className='remote-error';notice.setAttribute('role','alert');notice.textContent=message;$('#page').prepend(notice);}
+function replaceData(state){for(const key of Object.keys(data))delete data[key];Object.assign(data,structuredClone(state));}
+function renderSearch(p){
+ p.innerHTML=layout('Поиск по пространству','Задачи, проекты, память, клиенты и документы.',
+ '<section class="panel full"><label class="search-field">'+icon('search')+'<input id="workspaceSearch" type="search" aria-label="Поиск по записям" placeholder="Название, контакт или фраза из документа…" maxlength="300"></label><p id="searchCount" class="muted" role="status">Введите слова для поиска.</p><div id="searchResults"></div></section>');
+ const input=$('#workspaceSearch');input.focus();input.oninput=()=>{
+ const hits=window.NVSearch.search(data,input.value);
+ $('#searchCount').textContent=input.value.trim()?(hits.length?'Найдено: '+hits.length+(hits.length===100?' (первые 100)':''):'Совпадений нет.'):'Введите слова для поиска.';
+ $('#searchResults').innerHTML=hits.map((x,i)=>'<button class="search-result" data-hit="'+i+'">'+icon(x.icon)+'<span><small>'+esc(x.page)+'</small><b>'+esc(x.title)+'</b><span>'+esc(x.detail)+'</span></span>'+icon('arrow')+'</button>').join('');
+ document.querySelectorAll('[data-hit]').forEach(b=>b.onclick=()=>{const hit=hits[Number(b.dataset.hit)];if(hit.page==='Проекты')selectedProjectId=hit.id;if(hit.page==='Задачи'&&!serverMode()){editTask(hit.id);return;}nav(hit.page);});
+ };
+}
+function downloadJSON(content,name){const url=URL.createObjectURL(new Blob([content],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+function renderData(p){
+ const local=serverMode()?localSnapshot:data;
+ p.innerHTML=layout('Данные и восстановление','Контроль локальных записей: копия, история и отмена последнего действия.',
+ '<div class="overview-grid"><section class="panel full"><div class="section-symbol">'+icon('data')+'</div><h2>Ваши данные — под контролем</h2><p class="muted">Копия содержит записи и переписку этого браузера. Ключи доступа в неё не входят. Сохраните файл в надёжном месте.</p><button id="exportBackup" class="secondary">Скачать копию</button><button id="undoChange" class="secondary" '+(serverMode()||!storage.canUndo()?'disabled':'')+'>Отменить последнее изменение</button><p class="muted">Отмена доступна для одного последнего сохранения, включая переписку. Это локальная история, не защищённый журнал аудита.</p></section>'+
+ '<section class="panel full"><h2>Восстановить из копии</h2><p class="muted">После проверки и подтверждения файл заменит локальные записи. Замену можно отменить одним действием.</p><label class="file-label">Выбрать JSON-файл<input id="backupFile" type="file" accept=".json,application/json" '+(serverMode()||storage.problem()?'disabled':'')+'></label><p id="backupPreview" role="status"></p><button id="applyBackup" class="secondary" disabled>Заменить локальные записи</button><p id="formError" role="alert"></p></section></div>'+
+ '<section class="panel full history-panel"><div class="panel-title"><b>Последние сохранения</b><span class="muted">До 30 событий</span></div>'+storage.history().map(x=>'<div class="record"><b>'+esc(x.label)+'</b><time>'+esc(new Date(x.at).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'}))+' МСК</time></div>').join('')+(storage.history().length?'':'<p class="muted">Новые сохранения появятся здесь.</p>')+'</section>');
+ $('#exportBackup').onclick=()=>downloadJSON(storage.problem()?storage.raw()||'':storage.export(local),'nasha-volna-'+new Date().toISOString().slice(0,10)+'.json');
+ $('#undoChange').onclick=()=>{if(serverMode()||!storage.canUndo())return;try{const restored=storage.undo();storage.commit(restored,'Отменено последнее изменение',data,true);replaceData(restored);savedSnapshot=structuredClone(data);render('Данные');}catch(e){showError(e.message);}};
+ let candidate=null;
+ $('#backupFile').onchange=async e=>{candidate=null;$('#applyBackup').disabled=true;$('#formError').textContent='';const file=e.target.files[0];if(!file)return;try{if(file.size>5000000)throw Error('Размер файла превышает 5 МБ.');candidate=window.NVStorage.parseBackup(await file.text());$('#backupPreview').textContent='Проверено: '+candidate.tasks.length+' задач, '+candidate.projects.length+' проектов, '+candidate.docs.length+' документов, '+candidate.clients.length+' клиентов, '+candidate.memories.length+' фактов, '+candidate.messages.length+' сообщений.';$('#applyBackup').disabled=false;}catch(error){$('#backupPreview').textContent='';$('#formError').textContent=error.message;}};
+ $('#applyBackup').onclick=()=>{if(candidate)localChange(()=>replaceData(candidate),()=>render('Данные'),'Восстановлена резервная копия');};
+ if(storage.problem())showError(storage.problem()+' Изменения заблокированы; исходный файл доступен по кнопке скачивания.');
+}
+const pageIcons={'Обзор':'overview','AI':'ai','Память':'memory','Задачи':'tasks','Проекты':'projects','Клиенты':'clients','Документы':'docs','Данные':'data'};
+document.querySelectorAll('nav a').forEach(a=>{a.innerHTML=icon(pageIcons[a.dataset.page])+'<span>'+esc(a.dataset.page)+'</span>';a.setAttribute('href','#'+encodeURIComponent(a.dataset.page));a.setAttribute('title',a.dataset.page);a.setAttribute('aria-label',a.dataset.page);a.onclick=e=>{e.preventDefault();nav(a.dataset.page);};});
+$('#brandMark').innerHTML=icon('wave');
+$('#globalSearch').innerHTML=icon('search')+'<span>Поиск по пространству</span><kbd>Ctrl K</kbd>';
+$('#globalSearch').onclick=()=>nav('Поиск');
+document.addEventListener?.('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();nav('Поиск');}});
 const theme=$('#theme');
 if(localStorage.getItem('nv_theme')==='light') document.body.classList.add('light');
-theme.onclick=()=>{document.body.classList.toggle('light');localStorage.setItem('nv_theme',document.body.classList.contains('light')?'light':'dark');theme.textContent=document.body.classList.contains('light')?'☾':'☀';};
+theme.innerHTML=icon('sun');
+theme.onclick=()=>{document.body.classList.toggle('light');try{localStorage.setItem('nv_theme',document.body.classList.contains('light')?'light':'dark');}catch(e){showError('Не удалось сохранить тему.');}};
 render('AI');
+if(storage.problem())showError(storage.problem());
 })();

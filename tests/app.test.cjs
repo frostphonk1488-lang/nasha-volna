@@ -12,7 +12,7 @@ function boot(initial,remoteApi){
   const context={document,localStorage:{getItem:key=>store.get(key)||null,setItem:(key,value)=>{if(fail)throw Error('quota');store.set(key,value);}},structuredClone,setTimeout:fn=>fn(),console};
   context.window=context;context.NVRemote=remoteApi;
   vm.createContext(context);
-  vm.runInContext(fs.readFileSync('workspace-core.js','utf8'),context);
+  for(const file of ['icons.js','storage-core.js','search-core.js','workspace-core.js'])vm.runInContext(fs.readFileSync(file,'utf8'),context);
   vm.runInContext(fs.readFileSync('task-core.js','utf8'),context);
   vm.runInContext(fs.readFileSync('app.js','utf8'),context);
   return {store,alerts,elements,document,fail:()=>{fail=true;},recover:()=>{fail=false;},send:text=>{elements['#chatInput'].value=text;elements['#sendBtn'].onclick();}};

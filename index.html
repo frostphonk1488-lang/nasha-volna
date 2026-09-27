@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Nasha Volna AI</title>
-<link rel="stylesheet" href="style.css?v=11">
+<link rel="stylesheet" href="style.css?v=12">
 </head>
 <body>
 <div id="app" class="app">
   <aside class="sidebar">
-    <div class="brand"><strong>✦ Nasha Volna</strong><small>AI SYSTEM · MVP</small></div>
+    <div class="brand"><strong><span id="brandMark"></span><span class="brand-name">Nasha Volna</span></strong><small>РАБОЧЕЕ ПРОСТРАНСТВО</small></div>
     <nav>
       <a data-page="Обзор">◉ Обзор</a>
       <a class="active" data-page="AI">✦ AI</a>
@@ -18,27 +18,31 @@
       <a data-page="Проекты">▣ Проекты</a>
       <a data-page="Клиенты">♙ Клиенты</a>
       <a data-page="Документы">▤ Документы</a>
+      <a data-page="Данные">Данные</a>
     </nav>
     <div class="sidebar-bottom">
-      <button id="theme">☀</button>
-      <small>Первый MVP<br>AI + память + действия</small>
+      <button id="theme" aria-label="Переключить тему"></button>
+      <small>Память. Решения. Действия.</small>
     </div>
   </aside>
 
   <main>
     <header>
       <div class="top-title">Nasha Volna <span>/ AI Workspace</span></div>
-      <div class="profile"><i>А</i><span><b>Александр</b><small>Founder</small></span></div>
+      <button id="globalSearch" class="global-search" aria-label="Открыть поиск"></button>
     </header>
-    <nav class="mobile-nav" aria-label="Разделы"><a data-page="Обзор">Обзор</a><a data-page="AI">AI</a><a data-page="Задачи">Задачи</a><a data-page="Память">Память</a><a data-page="Проекты">Проекты</a><a data-page="Клиенты">Клиенты</a><a data-page="Документы">Документы</a></nav>
+    <nav class="mobile-nav" aria-label="Разделы"><a data-page="Обзор">Обзор</a><a data-page="AI">AI</a><a data-page="Задачи">Задачи</a><a data-page="Память">Память</a><a data-page="Проекты">Проекты</a><a data-page="Клиенты">Клиенты</a><a data-page="Документы">Документы</a><a data-page="Данные">Данные</a></nav>
     <section id="page" class="content">
       <div class="boot">✦ Запуск Nasha Volna AI…</div>
     </section>
   </main>
 </div>
-<script src="workspace-core.js?v=11"></script>
-<script src="remote-client.js?v=11"></script>
-<script src="task-core.js?v=11"></script>
-<script src="app.js?v=11"></script>
+<script src="icons.js?v=12"></script>
+<script src="storage-core.js?v=12"></script>
+<script src="search-core.js?v=12"></script>
+<script src="workspace-core.js?v=12"></script>
+<script src="remote-client.js?v=12"></script>
+<script src="task-core.js?v=12"></script>
+<script src="app.js?v=12"></script>
 </body>
 </html>
