@@ -9,7 +9,7 @@ function boot(initial,remoteApi){
   const elements={};
   const element=()=>({innerHTML:'',value:'',dataset:{},classList:{toggle(){},add(){},contains(){return false;}},focus(){},setSelectionRange(){},setAttribute(){},querySelector:s=>document.querySelector(s),querySelectorAll:()=>[],prepend(){},parentElement:{appendChild(x){alerts.push(x.textContent);}}});
   const document={querySelector:s=>elements[s]||(elements[s]=element()),querySelectorAll:s=>s==='nav a'?navElements:[],createElement:element,body:element()};
-  const navElements=['Клиенты','Заказы','Задачи','Данные','Финансы','Документы','Обзор','AI'].map(page=>Object.assign(element(),{dataset:{page}}));
+  const navElements=['Клиенты','Заказы','Задачи','Данные','Финансы','Документы','Обзор','AI','Команда','Каталог','Склад','Закупки'].map(page=>Object.assign(element(),{dataset:{page}}));
   const context={document,localStorage:{getItem:key=>store.get(key)||null,setItem:(key,value)=>{if(fail)throw Error('quota');store.set(key,value);}},structuredClone,setTimeout:fn=>fn(),console};
   context.window=context;context.NVRemote=remoteApi;
   vm.createContext(context);
@@ -18,6 +18,37 @@ function boot(initial,remoteApi){
   vm.runInContext(fs.readFileSync('app.js','utf8'),context);
   return {store,alerts,elements,document,go:page=>navElements.find(a=>a.dataset.page===page).onclick({preventDefault(){}}),fail:()=>{fail=true;},recover:()=>{fail=false;},send:text=>{elements['#chatInput'].value=text;elements['#sendBtn'].onclick();}};
 }
+test('team catalog purchase and stock forms save through the shared gateway',()=>{
+  const app=boot({tasks:[],projects:[]});
+  app.go('Команда');app.elements['#operationAdd'].onclick();
+  for(const [key,value] of Object.entries({personName:'Менеджер',personRole:'Продажи',personContact:'',personStatus:'Активен'}))app.document.querySelector('#'+key).value=value;
+  app.elements['#operationForm'].onsubmit({preventDefault(){}});
+  app.go('Каталог');app.elements['#operationAdd'].onclick();
+  for(const [key,value] of Object.entries({productName:'Товар',productSKU:'SKU',productUnit:'шт',productMin:'2'}))app.document.querySelector('#'+key).value=value;
+  app.elements['#operationForm'].onsubmit({preventDefault(){}});
+  let saved=JSON.parse(app.store.get('nv_mvp_v2'));assert.equal(saved.employees.length,1);assert.equal(saved.products.length,1);
+  app.go('Закупки');app.elements['#operationAdd'].onclick();
+  for(const [key,value] of Object.entries({purchaseProduct:saved.products[0].id,purchaseSupplier:'Завод',purchaseQty:'5',purchaseDue:'2026-10-01',purchaseNote:''}))app.document.querySelector('#'+key).value=value;
+  app.elements['#operationForm'].onsubmit({preventDefault(){}});
+  app.go('Склад');app.elements['#operationAdd'].onclick();
+  for(const [key,value] of Object.entries({movementProduct:saved.products[0].id,movementKind:'out',movementQty:'1',movementNote:'Ошибка'}))app.document.querySelector('#'+key).value=value;
+  app.elements['#operationForm'].onsubmit({preventDefault(){}});
+  saved=JSON.parse(app.store.get('nv_mvp_v2'));assert.equal(saved.stock.length,0);assert.equal(saved.purchases.length,1);assert.match(app.elements['#formError'].textContent,/Недостаточно/);
+  const restored=boot(saved);restored.go('Закупки');assert.match(restored.elements['#page'].innerHTML,/Завод/);
+});
+test('server client form uses record API and leaves local workspace intact',async()=>{
+  const local={clients:[{id:'local',name:'Локальный'}]};
+  const state={messages:[],memories:[],tasks:[],projects:[],clients:[],orders:[],ledger:[],employees:[],docs:[],products:[],stock:[],purchases:[]};
+  let calls=0;
+  const api={connected:false,view:{state,revision:0,plans:[],capabilities:{records:true,write:['clients'],import:false}},
+    async connect(){this.connected=true;return this.view;},
+    async post(path,body){calls++;assert.equal(path,'/api/records');assert.equal(body.operations.length,1);assert.equal(body.operations[0].collection,'clients');this.view={...this.view,revision:1,state:{...state,clients:[body.operations[0].record]}};return this.view;}};
+  const app=boot(local,api);app.elements['#connectionBtn'].onclick();
+  await app.elements['#connectForm'].onsubmit({preventDefault(){}});
+  app.go('Клиенты');app.elements['#addClient'].onclick();app.document.querySelector('#clientName').value='Общий клиент';app.document.querySelector('#clientContact').value='';app.document.querySelector('#clientNotes').value='';
+  app.elements['#clientForm'].onsubmit({preventDefault(){}});await new Promise(r=>setImmediate(r));
+  assert.equal(calls,1);assert.match(app.elements['#page'].innerHTML,/Общий клиент/);assert.equal(JSON.parse(app.store.get('nv_mvp_v2')).clients[0].id,'local');
+});
 test('chat integrates task core, retains existing records and reloads context',()=>{
   const app=boot({tasks:[{id:'old',title:'Старая задача',status:'Новая'}]});
   app.send('Создай задачу: Проверка интеграции');
@@ -110,4 +141,3 @@ test('finance requires review; storage failure rolls back; exact retry and reloa
 test('document form escapes HTML and persists links and multiline text',()=>{const app=boot({projects:[{id:'p',name:'Проект'}],orders:[{id:'o',name:'Заказ'}]});app.go('Документы');app.elements['#addDoc'].onclick();for(const [k,v] of Object.entries({docName:'<img src=x onerror=alert(1)>',docFolder:'ТЗ',docText:'Строка 1\n<script>alert(1)</script>',docProject:'p',docOrder:'o'}))app.document.querySelector('#'+k).value=v;app.elements['#docForm'].onsubmit({preventDefault(){}});assert.ok(!app.elements['#page'].innerHTML.includes('<script>'));assert.match(app.elements['#page'].innerHTML,/&lt;script&gt;/);const d=JSON.parse(app.store.get('nv_mvp_v2'));assert.equal(d.docs[0].orderId,'o');assert.equal(d.docs[0].projectId,'p');assert.match(d.docs[0].text,/\n/);});
 test('financial chat commands do not accidentally become memory records',()=>{const app=boot({memories:[]});app.send('Запиши расход 500 рублей');const d=JSON.parse(app.store.get('nv_mvp_v2'));assert.equal(d.memories.length,0);assert.equal(d.ledger.length,0);assert.match(d.messages.at(-1).text,/не создана/);});
 test('newer backup selection wins if an earlier file finishes reading later',async()=>{const app=boot();app.go('Данные');const payload=name=>JSON.stringify({format:'nasha-volna-backup',version:3,state:{messages:[],tasks:[],memories:[],projects:[],clients:[{id:'c',name}],employees:[],docs:[],orders:[],ledger:[]}});let resolve;const slow=new Promise(r=>resolve=r);const first=app.elements['#backupFile'].onchange({target:{files:[{size:10,text:()=>slow}]}});await app.elements['#backupFile'].onchange({target:{files:[{size:10,text:async()=>payload('Новая копия')}]}});resolve(payload('Старая копия'));await first;app.elements['#applyBackup'].onclick();assert.equal(JSON.parse(app.store.get('nv_mvp_v2')).clients[0].name,'Новая копия');});
-
