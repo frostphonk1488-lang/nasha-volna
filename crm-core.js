@@ -15,6 +15,6 @@ function order(v,data){
 }
 function summary(data,clientId){const orders=(data.orders||[]).filter(o=>!clientId||o.clientId===clientId),active=orders.filter(o=>!['Выполнен','Отменён'].includes(o.status));let amountCents=0,unknown=0;for(const o of active){if(!o.amount){unknown++;continue;}amountCents+=cents(o.amount);}return {orders,active,amountCents,unknown};}
 function removeClient(data,id){if((data.orders||[]).some(o=>o.clientId===id))throw Error('У клиента есть заказы. Сначала перенесите или удалите их.');data.clients=data.clients.filter(c=>c.id!==id);}
-function removeOrder(data,id){if(data.tasks.some(t=>t.orderId===id))throw Error('У заказа есть задачи. Сначала отвяжите их или выберите этап «Отменён».');data.orders=data.orders.filter(o=>o.id!==id);}
+function removeOrder(data,id){if((data.ledger||[]).some(e=>e.orderId===id))throw Error('У заказа есть финансовые операции. Выберите этап «Отменён»: записи должны сохранить связь с заказом.');if((data.docs||[]).some(d=>d.orderId===id))throw Error('У заказа есть документы. Сначала отвяжите их.');if(data.tasks.some(t=>t.orderId===id))throw Error('У заказа есть задачи. Сначала отвяжите их или выберите этап «Отменён».');data.orders=data.orders.filter(o=>o.id!==id);}
 return {stages,cents,client,order,summary,removeClient,removeOrder};
 });

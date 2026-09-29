@@ -29,10 +29,15 @@ def empty_state():
 def validate_import(raw):
     if not isinstance(raw, dict):
         raise Problem('Ожидается объект данных.')
+    if raw.get('orders') or raw.get('ledger'):
+        raise Problem('Сервер пока не поддерживает заказы и финансовые операции. Импорт отменён без изменений.')
+    for key in ('tasks', 'docs'):
+        if isinstance(raw.get(key), list) and any(isinstance(row, dict) and row.get('orderId') for row in raw[key]):
+            raise Problem('Сервер пока не поддерживает связи с заказами.')
     state = empty_state()
     fields = {'tasks': ('title', 'status', 'dueDate', 'projectId'), 'memories': ('type', 'text'),
-              'projects': ('name', 'desc'), 'clients': ('name', 'contact'),
-              'employees': ('name', 'role'), 'docs': ('name', 'desc', 'text', 'projectId')}
+              'projects': ('name', 'desc'), 'clients': ('name', 'contact', 'notes', 'createdAt', 'updatedAt'),
+              'employees': ('name', 'role'), 'docs': ('name', 'desc', 'text', 'projectId', 'folder', 'updatedAt')}
     required = {'tasks': 'title', 'memories': 'text', 'projects': 'name', 'clients': 'name', 'employees': 'name', 'docs': 'name'}
     for key in COLLECTIONS:
         rows = raw.get(key, [])
@@ -50,7 +55,7 @@ def validate_import(raw):
             for field in fields[key]:
                 value = row.get(field)
                 if value is not None:
-                    if not isinstance(value, str) or len(value) > (20000 if key == 'docs' and field == 'text' else 2000):
+                    if not isinstance(value, str) or len(value) > (20000 if key == 'docs' and field == 'text' else 5000 if key == 'clients' and field == 'notes' else 2000):
                         raise Problem('Слишком длинное или некорректное поле.')
                     result[field] = value
             text(result.get(required[key]), required[key])

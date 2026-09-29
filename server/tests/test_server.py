@@ -28,6 +28,12 @@ class ServiceTests(unittest.TestCase):
         self.n+=1
         payload={'requestId':str(self.n),'revision':self.service.state('alice')['revision'],**kwargs}
         return self.service.dispatch('alice',path,payload)
+    def test_unsupported_financial_import_is_atomic(self):
+        before = self.service.state('alice')
+        for value in ({'ledger':[{'id':'entry'}]}, {'orders':[{'id':'order'}]}, {'tasks':[{'id':'t','title':'Task','orderId':'o'}]}):
+            with self.assertRaises(Problem): self.post('/api/import',data=value)
+            self.assertEqual(self.service.state('alice'), before)
+
     def propose(self,actions):
         self.provider.result={'reply':'План готов.','actions':actions,'sources':[]}
         return self.post('/api/chat',message='Создай проект и задачи')

@@ -9,11 +9,11 @@ function boot(initial,remoteApi){
   const elements={};
   const element=()=>({innerHTML:'',value:'',dataset:{},classList:{toggle(){},add(){},contains(){return false;}},focus(){},setSelectionRange(){},setAttribute(){},querySelector:s=>document.querySelector(s),querySelectorAll:()=>[],prepend(){},parentElement:{appendChild(x){alerts.push(x.textContent);}}});
   const document={querySelector:s=>elements[s]||(elements[s]=element()),querySelectorAll:s=>s==='nav a'?navElements:[],createElement:element,body:element()};
-  const navElements=['Клиенты','Заказы','Задачи','Данные'].map(page=>Object.assign(element(),{dataset:{page}}));
+  const navElements=['Клиенты','Заказы','Задачи','Данные','Финансы','Документы','Обзор','AI'].map(page=>Object.assign(element(),{dataset:{page}}));
   const context={document,localStorage:{getItem:key=>store.get(key)||null,setItem:(key,value)=>{if(fail)throw Error('quota');store.set(key,value);}},structuredClone,setTimeout:fn=>fn(),console};
   context.window=context;context.NVRemote=remoteApi;
   vm.createContext(context);
-  for(const file of ['icons.js','crm-core.js','storage-core.js','search-core.js','workspace-core.js'])vm.runInContext(fs.readFileSync(file,'utf8'),context);
+  for(const file of ['icons.js','crm-core.js','finance-core.js','storage-core.js','search-core.js','workspace-core.js'])vm.runInContext(fs.readFileSync(file,'utf8'),context);
   vm.runInContext(fs.readFileSync('task-core.js','utf8'),context);
   vm.runInContext(fs.readFileSync('app.js','utf8'),context);
   return {store,alerts,elements,document,go:page=>navElements.find(a=>a.dataset.page===page).onclick({preventDefault(){}}),fail:()=>{fail=true;},recover:()=>{fail=false;},send:text=>{elements['#chatInput'].value=text;elements['#sendBtn'].onclick();}};
@@ -99,3 +99,14 @@ test('client to order to task persists, is searchable and undoable after reload'
  again.go('Данные');again.elements['#undoChange'].onclick();d=JSON.parse(again.store.get('nv_mvp_v2'));assert.equal(d.tasks.length,0);assert.equal(d.orders.length,1);assert.equal(d.clients.length,1);
 });
 test('failed order save rolls back and retry creates exactly one record',()=>{const app=boot({clients:[{id:'c',name:'Клиент'}],orders:[]});app.go('Заказы');app.elements['#addOrder'].onclick();for(const [k,v] of Object.entries({orderName:'Заказ',orderClientId:'c',orderAmount:'100',orderDue:'',orderStatus:'Новый',orderOwner:'',orderNotes:'',orderProject:''}))app.document.querySelector('#'+k).value=v;app.fail();app.elements['#orderForm'].onsubmit({preventDefault(){}});assert.match(app.elements['#formError'].textContent,/не сохранены/);app.recover();app.elements['#orderForm'].onsubmit({preventDefault(){}});assert.equal(JSON.parse(app.store.get('nv_mvp_v2')).orders.length,1);});
+
+test('finance requires review; storage failure rolls back; exact retry and reload retain one payment',()=>{
+ const app=boot({clients:[{id:'c',name:'Клиент'}],orders:[{id:'o',name:'Сайт',clientId:'c',amount:'100.00',status:'Новый'}]});app.go('Финансы');app.elements['#addEntry'].onclick();
+ for(const [k,v] of Object.entries({entryKind:'income',entryAmount:'25,50',entryDate:'2026-09-01',entryOrder:'o',entryCategory:'Оплата заказа',entryNote:'Аванс'}))app.document.querySelector('#'+k).value=v;
+ app.elements['#entryForm'].onsubmit({preventDefault(){}});assert.equal(JSON.parse(app.store.get('nv_mvp_v2')).ledger,undefined);
+ const confirm=app.elements['#confirmEntry'].onclick;app.fail();confirm();assert.match(app.elements['#formError'].textContent,/не сохранены/);app.recover();confirm();confirm();const d=JSON.parse(app.store.get('nv_mvp_v2'));assert.equal(d.ledger.length,1);assert.equal(d.ledger[0].amount,'25.50');
+ const restored=boot(d);restored.go('Финансы');assert.match(restored.elements['#page'].innerHTML,/74,50/);restored.go('AI');restored.send('Финансовый обзор');assert.match(restored.elements['#page'].innerHTML,/74,50/);
+});
+test('document form escapes HTML and persists links and multiline text',()=>{const app=boot({projects:[{id:'p',name:'Проект'}],orders:[{id:'o',name:'Заказ'}]});app.go('Документы');app.elements['#addDoc'].onclick();for(const [k,v] of Object.entries({docName:'<img src=x onerror=alert(1)>',docFolder:'ТЗ',docText:'Строка 1\n<script>alert(1)</script>',docProject:'p',docOrder:'o'}))app.document.querySelector('#'+k).value=v;app.elements['#docForm'].onsubmit({preventDefault(){}});assert.ok(!app.elements['#page'].innerHTML.includes('<script>'));assert.match(app.elements['#page'].innerHTML,/&lt;script&gt;/);const d=JSON.parse(app.store.get('nv_mvp_v2'));assert.equal(d.docs[0].orderId,'o');assert.equal(d.docs[0].projectId,'p');assert.match(d.docs[0].text,/\n/);});
+test('financial chat commands do not accidentally become memory records',()=>{const app=boot({memories:[]});app.send('Запиши расход 500 рублей');const d=JSON.parse(app.store.get('nv_mvp_v2'));assert.equal(d.memories.length,0);assert.equal(d.ledger.length,0);assert.match(d.messages.at(-1).text,/не создана/);});
+test('newer backup selection wins if an earlier file finishes reading later',async()=>{const app=boot();app.go('Данные');const payload=name=>JSON.stringify({format:'nasha-volna-backup',version:3,state:{messages:[],tasks:[],memories:[],projects:[],clients:[{id:'c',name}],employees:[],docs:[],orders:[],ledger:[]}});let resolve;const slow=new Promise(r=>resolve=r);const first=app.elements['#backupFile'].onchange({target:{files:[{size:10,text:()=>slow}]}});await app.elements['#backupFile'].onchange({target:{files:[{size:10,text:async()=>payload('Новая копия')}]}});resolve(payload('Старая копия'));await first;app.elements['#applyBackup'].onclick();assert.equal(JSON.parse(app.store.get('nv_mvp_v2')).clients[0].name,'Новая копия');});
