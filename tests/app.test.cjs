@@ -8,14 +8,15 @@ function boot(initial,remoteApi){
   const alerts=[];
   const elements={};
   const element=()=>({innerHTML:'',value:'',dataset:{},classList:{toggle(){},add(){},contains(){return false;}},focus(){},setSelectionRange(){},setAttribute(){},querySelector:s=>document.querySelector(s),querySelectorAll:()=>[],prepend(){},parentElement:{appendChild(x){alerts.push(x.textContent);}}});
-  const document={querySelector:s=>elements[s]||(elements[s]=element()),querySelectorAll:()=>[],createElement:element,body:element()};
+  const document={querySelector:s=>elements[s]||(elements[s]=element()),querySelectorAll:s=>s==='nav a'?navElements:[],createElement:element,body:element()};
+  const navElements=['Клиенты','Заказы','Задачи','Данные'].map(page=>Object.assign(element(),{dataset:{page}}));
   const context={document,localStorage:{getItem:key=>store.get(key)||null,setItem:(key,value)=>{if(fail)throw Error('quota');store.set(key,value);}},structuredClone,setTimeout:fn=>fn(),console};
   context.window=context;context.NVRemote=remoteApi;
   vm.createContext(context);
-  for(const file of ['icons.js','storage-core.js','search-core.js','workspace-core.js'])vm.runInContext(fs.readFileSync(file,'utf8'),context);
+  for(const file of ['icons.js','crm-core.js','storage-core.js','search-core.js','workspace-core.js'])vm.runInContext(fs.readFileSync(file,'utf8'),context);
   vm.runInContext(fs.readFileSync('task-core.js','utf8'),context);
   vm.runInContext(fs.readFileSync('app.js','utf8'),context);
-  return {store,alerts,elements,document,fail:()=>{fail=true;},recover:()=>{fail=false;},send:text=>{elements['#chatInput'].value=text;elements['#sendBtn'].onclick();}};
+  return {store,alerts,elements,document,go:page=>navElements.find(a=>a.dataset.page===page).onclick({preventDefault(){}}),fail:()=>{fail=true;},recover:()=>{fail=false;},send:text=>{elements['#chatInput'].value=text;elements['#sendBtn'].onclick();}};
 }
 test('chat integrates task core, retains existing records and reloads context',()=>{
   const app=boot({tasks:[{id:'old',title:'Старая задача',status:'Новая'}]});
@@ -87,3 +88,14 @@ test('task form storage failure leaves no phantom task',()=>{
   app.recover();app.elements['#taskForm'].onsubmit({preventDefault(){}});
   assert.equal(JSON.parse(app.store.get('nv_mvp_v2')).tasks.length,1);
 });
+
+test('client to order to task persists, is searchable and undoable after reload',()=>{
+ const app=boot({clients:[],orders:[],tasks:[]});const fill=values=>{for(const [k,v] of Object.entries(values))app.document.querySelector('#'+k).value=v;};const submit=id=>app.elements['#'+id].onsubmit({preventDefault(){}});
+ app.go('Клиенты');app.elements['#addClient'].onclick();fill({clientName:'Студия',clientContact:'test@example.com',clientNotes:'Первый заказ'});submit('clientForm');
+ app.elements['#clientOrder'].onclick();const c=JSON.parse(app.store.get('nv_mvp_v2')).clients[0];fill({orderName:'Лендинг',orderClientId:c.id,orderAmount:'25000,50',orderDue:'2026-10-01',orderStatus:'В работе',orderOwner:'Александр',orderNotes:'Тест',orderProject:''});submit('orderForm');
+ let d=JSON.parse(app.store.get('nv_mvp_v2'));assert.equal(d.orders[0].amount,'25000.50');app.elements['#orderTask'].onclick();fill({taskTitle:'Макет',taskDue:'',taskStatus:'Новая',taskProject:'',taskOrder:d.orders[0].id});submit('taskForm');
+ d=JSON.parse(app.store.get('nv_mvp_v2'));assert.equal(d.tasks[0].orderId,d.orders[0].id);
+ const again=boot(d);again.elements['#globalSearch'].onclick();again.elements['#workspaceSearch'].value='Лендинг';again.elements['#workspaceSearch'].oninput();assert.match(again.elements['#searchResults'].innerHTML,/Лендинг/);
+ again.go('Данные');again.elements['#undoChange'].onclick();d=JSON.parse(again.store.get('nv_mvp_v2'));assert.equal(d.tasks.length,0);assert.equal(d.orders.length,1);assert.equal(d.clients.length,1);
+});
+test('failed order save rolls back and retry creates exactly one record',()=>{const app=boot({clients:[{id:'c',name:'Клиент'}],orders:[]});app.go('Заказы');app.elements['#addOrder'].onclick();for(const [k,v] of Object.entries({orderName:'Заказ',orderClientId:'c',orderAmount:'100',orderDue:'',orderStatus:'Новый',orderOwner:'',orderNotes:'',orderProject:''}))app.document.querySelector('#'+k).value=v;app.fail();app.elements['#orderForm'].onsubmit({preventDefault(){}});assert.match(app.elements['#formError'].textContent,/не сохранены/);app.recover();app.elements['#orderForm'].onsubmit({preventDefault(){}});assert.equal(JSON.parse(app.store.get('nv_mvp_v2')).orders.length,1);});

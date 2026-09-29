@@ -15,6 +15,7 @@ const defaults = {
   ],
   projects: [{id:'p1', name:'Nasha Volna', desc:'AI + память + действия'}],
   clients: [],
+  orders: [],
   employees: [],
   docs: []
 };
@@ -61,7 +62,7 @@ function layout(title, subtitle, body){
 function render(page='AI'){
   const p = $('#page');
   if(!p) return;
-  const pages={'Обзор':renderOverview,'AI':renderAI,'Память':renderMemory,'Задачи':renderTasks,'Проекты':renderProjects,'Клиенты':renderClients,'Документы':renderDocs,'Подключение':renderConnection,'Поиск':renderSearch,'Данные':renderData};
+  const pages={'Обзор':renderOverview,'AI':renderAI,'Память':renderMemory,'Задачи':renderTasks,'Проекты':renderProjects,'Клиенты':renderClients,'Заказы':renderOrders,'Документы':renderDocs,'Подключение':renderConnection,'Поиск':renderSearch,'Данные':renderData};
   if(pages[page]) pages[page](p);
   if(serverMode() && !['AI','Подключение'].includes(page)){
     p.querySelectorAll('[data-status],[data-del],#addMemory,#addTask,#addProject,#addClient,#addDoc').forEach(b=>{b.disabled=true;b.title='В серверном режиме изменения доступны через AI с проверкой плана.';});
@@ -280,11 +281,48 @@ function renderProjects(p){
   document.querySelectorAll('[data-project]').forEach(b=>b.onclick=()=>{selectedProjectId=b.dataset.project;render('Проекты');});
 }
 
+let selectedClientId=null,selectedOrderId=null,orderStage='all';
+const money=value=>new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB'}).format(value/100);
+const options=(rows,selected,empty)=>'<option value="">'+empty+'</option>'+rows.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===selected?'selected':'')+'>'+esc(x.name)+'</option>').join('');
+function orderRows(orders){return orders.map(o=>{const tasks=data.tasks.filter(t=>t.orderId===o.id);return '<button class="project-card" data-order="'+esc(o.id)+'"><span class="tag">'+esc(o.status)+'</span><b>'+esc(o.name)+'</b><p>'+esc(data.clients.find(c=>c.id===o.clientId)?.name||'Клиент не найден')+'</p><strong>'+(o.amount?money(window.NVCRM.cents(o.amount)):'Сумма не указана')+'</strong><p>'+(o.dueDate?'Срок: '+esc(o.dueDate):'Без срока')+' · '+tasks.filter(t=>t.status==='Выполнена').length+'/'+tasks.length+' задач</p></button>';}).join('')||'<p class="empty">Заказов пока нет.</p>';}
+function bindOrders(){document.querySelectorAll('[data-order]').forEach(b=>b.onclick=()=>{selectedOrderId=b.dataset.order;nav('Заказы');});}
 function renderClients(p){
-  p.innerHTML=layout('Клиенты','Будущая база контекста для AI.',
-    '<section class="panel full"><div class="panel-title"><b>Клиенты</b><button class="primary" id="addClient">'+icon('plus')+' Добавить</button></div><div class="records">'+
-    (data.clients.map(x=>'<div class="record"><div><b>'+esc(x.name)+'</b><p>'+esc(x.contact||'Контакт не указан')+'</p></div></div>').join('')||'<div class="empty">Пока нет клиентов.</div>')+'</div></section>');
-  $('#addClient').onclick=()=>{const x=prompt('Имя или название клиента');if(x){const c=prompt('Контакт')||'';localChange(()=>data.clients.push({id:uid('c'),name:x,contact:c}),()=>render('Клиенты'),'Добавлен клиент');}};
+ const client=data.clients.find(c=>c.id===selectedClientId);
+ if(client){
+  const summary=window.NVCRM.summary(data,client.id);
+  p.innerHTML=layout(esc(client.name),'Карточка клиента · контакты, заметки и связанные заказы',
+   '<section class="panel full"><div class="panel-title"><b>Контакты</b><button id="allClients">Все клиенты</button></div><p class="preserve">'+esc(client.contact||'Контакты не указаны')+'</p><h3>Заметки</h3><p class="preserve">'+esc(client.notes||'Заметок пока нет')+'</p><p class="muted">'+(client.createdAt?'Создан: '+esc(new Date(client.createdAt).toLocaleDateString('ru-RU')):'Дата создания старой записи неизвестна')+(client.updatedAt?' · Изменён: '+esc(new Date(client.updatedAt).toLocaleDateString('ru-RU')):'')+'</p><button class="secondary" id="editClient" '+(serverMode()?'disabled':'')+'>Редактировать клиента</button><button class="secondary" id="clientOrder" '+(serverMode()?'disabled':'')+'>Новый заказ</button></section><section class="panel full history-panel"><div class="panel-title"><b>Заказы клиента · '+summary.orders.length+'</b></div><div class="project-cards">'+orderRows(summary.orders)+'</div></section>');
+  $('#allClients').onclick=()=>{selectedClientId=null;render('Клиенты');};$('#editClient').onclick=()=>editClient(client.id);$('#clientOrder').onclick=()=>editOrder(null,client.id);bindOrders();return;
+ }
+ p.innerHTML=layout('Клиенты','Контакты, заметки и история заказов в одном месте.',
+ '<section class="panel full"><div class="panel-title"><b>Клиенты · '+data.clients.length+'</b><button class="primary" id="addClient">'+icon('plus')+' Добавить клиента</button></div><div class="project-cards">'+(data.clients.map(c=>'<button class="project-card" data-client="'+esc(c.id)+'"><b>'+esc(c.name)+'</b><p>'+esc(c.contact||'Контакты не указаны')+'</p><small>'+window.NVCRM.summary(data,c.id).orders.length+' заказов</small></button>').join('')||'<p class="empty">Добавьте первого клиента, затем создайте для него заказ.</p>')+'</div></section>');
+ $('#addClient').onclick=()=>editClient();document.querySelectorAll('[data-client]').forEach(b=>b.onclick=()=>{selectedClientId=b.dataset.client;render('Клиенты');});
+}
+function editClient(id=null){
+ if(serverMode())return;const current=data.clients.find(c=>c.id===id),c=current||{};
+ $('#page').innerHTML=layout(id?'Редактировать клиента':'Новый клиент','Сохраните контакты и договорённости.',
+ '<section class="panel full connection-panel"><form id="clientForm"><label>Название клиента<input id="clientName" maxlength="300" required value="'+esc(c.name)+'"></label><label>Контакты<textarea id="clientContact" maxlength="500" rows="2">'+esc(c.contact)+'</textarea></label><label>Заметки о клиенте<textarea id="clientNotes" maxlength="5000" rows="5">'+esc(c.notes)+'</textarea></label><p id="formError" role="alert"></p><button class="secondary" type="submit">Сохранить клиента</button><button class="secondary" type="button" id="cancelClient">Отмена</button>'+(current?'<button class="secondary danger" type="button" id="deleteClient">Удалить клиента</button>':'')+'</form></section>');
+ $('#cancelClient').onclick=()=>nav('Клиенты');
+ $('#clientForm').onsubmit=e=>{e.preventDefault();localChange(()=>{const values=window.NVCRM.client({name:$('#clientName').value,contact:$('#clientContact').value,notes:$('#clientNotes').value},data,id);const record={...c,...values,id:id||uid('client'),createdAt:c.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};if(current)data.clients[data.clients.indexOf(current)]=record;else data.clients.push(record);selectedClientId=record.id;},()=>nav('Клиенты'),id?'Изменён клиент':'Добавлен клиент');};
+ if(current)$('#deleteClient').onclick=()=>{if(confirm('Удалить клиента «'+current.name+'»? Последнее изменение можно отменить в разделе «Данные».'))localChange(()=>window.NVCRM.removeClient(data,id),()=>{selectedClientId=null;nav('Клиенты');},'Удалён клиент');};
+}
+function renderOrders(p){
+ if(serverMode()){p.innerHTML=layout('Заказы','Заказы пока доступны в локальном режиме.','<section class="panel full"><p>Подключённый сервер пока не поддерживает заказы. Локальные заказы сохранены в браузере; вернитесь в локальный режим через настройки подключения.</p><button class="secondary" id="orderConnection">Открыть подключение</button></section>');$('#orderConnection').onclick=()=>nav('Подключение');return;}
+ const o=(data.orders||[]).find(x=>x.id===selectedOrderId);
+ if(o){const tasks=data.tasks.filter(t=>t.orderId===o.id);
+ p.innerHTML=layout(esc(o.name),'Заказ · '+esc(o.status),'<section class="panel full"><div class="panel-title"><b>'+(o.amount?money(window.NVCRM.cents(o.amount)):'Сумма не указана')+'</b><button id="allOrders">Все заказы</button></div><p>Клиент: <button class="secondary" id="orderClient">'+esc(data.clients.find(c=>c.id===o.clientId)?.name||'Клиент не найден')+'</button></p><p>Срок: '+esc(o.dueDate||'не указан')+' · Ответственный: '+esc(o.owner||'не указан')+'</p><p>Проект: '+esc(data.projects.find(x=>x.id===o.projectId)?.name||'не выбран')+'</p><p class="preserve">'+esc(o.notes||'Описание пока не добавлено')+'</p><button class="secondary" id="editOrder">Редактировать заказ</button><button class="secondary" id="orderTask">Добавить задачу</button></section><section class="panel full history-panel"><div class="panel-title"><b>Задачи заказа · '+tasks.filter(t=>t.status==='Выполнена').length+'/'+tasks.length+'</b></div>'+taskRows(tasks)+'</section>');
+ $('#allOrders').onclick=()=>{selectedOrderId=null;render('Заказы');};$('#orderClient').onclick=()=>{selectedClientId=o.clientId;nav('Клиенты');};$('#editOrder').onclick=()=>editOrder(o.id);$('#orderTask').onclick=()=>editTask(null,o.projectId,o.id);bindTaskEditors();return;}
+ const summary=window.NVCRM.summary(data),orders=summary.orders.filter(o=>orderStage==='all'||o.status===orderStage);
+ p.innerHTML=layout('Заказы','От договорённости с клиентом до выполненных задач.', '<div class="overview-metrics"><section class="panel overview-metric"><strong>'+summary.active.length+'</strong><span>Активных заказов</span></section><section class="panel overview-metric order-total"><strong>'+money(summary.amountCents)+'</strong><span>Сумма активных заказов · не выручка</span></section></div><section class="panel full"><div class="panel-title"><b>Заказы · '+orders.length+'</b><button class="primary" id="addOrder">'+icon('plus')+' Новый заказ</button></div><p class="muted">'+summary.unknown+' активных заказов без суммы. Оплаты и расходы пока не учитываются.</p><div class="filters"><label>Этап заказа<select id="orderStage"><option value="all">Все этапы</option>'+window.NVCRM.stages.map(v=>'<option '+(v===orderStage?'selected':'')+'>'+v+'</option>').join('')+'</select></label></div><div class="project-cards">'+orderRows(orders)+'</div></section>');
+ $('#addOrder').onclick=()=>editOrder();$('#orderStage').onchange=e=>{orderStage=e.target.value;render('Заказы');};bindOrders();
+}
+function editOrder(id=null,clientId=''){
+ if(serverMode())return;const current=(data.orders||[]).find(o=>o.id===id),o=current||{clientId,status:'Новый'};
+ $('#page').innerHTML=layout(id?'Редактировать заказ':'Новый заказ','Сумма — стоимость заказа в рублях. Ответственный пока задаётся текстом.',
+ '<section class="panel full connection-panel"><form id="orderForm"><label>Название заказа<input id="orderName" maxlength="300" required value="'+esc(o.name)+'"></label><label>Клиент<select id="orderClientId" required>'+options(data.clients,o.clientId,'Выберите клиента')+'</select></label>'+(!data.clients.length?'<p class="muted">Сначала добавьте клиента в разделе «Клиенты».</p>':'')+'<div class="form-grid"><label>Сумма, ₽<input id="orderAmount" inputmode="decimal" placeholder="Не указана" value="'+esc(o.amount)+'"></label><label>Срок заказа<input id="orderDue" type="date" value="'+esc(o.dueDate)+'"></label></div><label>Этап<select id="orderStatus">'+window.NVCRM.stages.map(v=>'<option '+(v===o.status?'selected':'')+'>'+v+'</option>').join('')+'</select></label><label>Ответственный<input id="orderOwner" maxlength="300" value="'+esc(o.owner)+'"></label><label>Связанный проект<select id="orderProject">'+options(data.projects,o.projectId,'Без проекта')+'</select></label><label>Описание заказа<textarea id="orderNotes" maxlength="5000" rows="4">'+esc(o.notes)+'</textarea></label><p class="muted">Смена этапа заказа не меняет статусы его задач автоматически.</p><p id="formError" role="alert"></p><button class="secondary" type="submit">Сохранить заказ</button><button class="secondary" type="button" id="cancelOrder">Отмена</button>'+(current?'<button class="secondary danger" type="button" id="deleteOrder">Удалить заказ</button>':'')+'</form></section>');
+ $('#cancelOrder').onclick=()=>nav('Заказы');
+ $('#orderForm').onsubmit=e=>{e.preventDefault();localChange(()=>{const values=window.NVCRM.order({name:$('#orderName').value,clientId:$('#orderClientId').value,amount:$('#orderAmount').value,dueDate:$('#orderDue').value,status:$('#orderStatus').value,owner:$('#orderOwner').value,projectId:$('#orderProject').value,notes:$('#orderNotes').value},data);const record={...o,...values,id:id||uid('order'),createdAt:o.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};if(current)data.orders[data.orders.indexOf(current)]=record;else data.orders.push(record);selectedOrderId=record.id;},()=>nav('Заказы'),id?'Изменён заказ':'Создан заказ');};
+ if(current)$('#deleteOrder').onclick=()=>{if(confirm('Удалить заказ «'+current.name+'»? Последнее изменение можно отменить в разделе «Данные».'))localChange(()=>window.NVCRM.removeOrder(data,id),()=>{selectedOrderId=null;nav('Заказы');},'Удалён заказ');};
 }
 
 function renderDocs(p){
@@ -324,7 +362,8 @@ function renderConnection(p){
   if(serverMode()){
     $('#disconnectRemote').onclick=()=>{remote().disconnect();for(const k of Object.keys(data))delete data[k];Object.assign(data,localSnapshot||load());localSnapshot=null;remoteError='';nav('AI');};
     $('#importRemote').onclick=()=>remoteRequest(()=>remote().post('/api/import',{data:localSnapshot||load()}));
-    $('#importRemote').disabled=remote().view.revision!==0;
+    $('#importRemote').disabled=remote().view.revision!==0||!!localSnapshot?.orders?.length;
+    if(localSnapshot?.orders?.length)$('#connectStatus').textContent='Импорт локального пространства заблокирован: сервер пока не поддерживает заказы. Сохраните копию в разделе «Данные».';
   }else{
     const form=$('#connectForm');
     form.onsubmit=async event=>{
@@ -359,22 +398,23 @@ function localChange(change,after,label='Изменение задач или п
 }
 function taskRows(tasks){
   const date=window.NVWorkspace.today();
-  return tasks.map(t=>'<div class="record"><div><b>'+esc(t.title)+'</b><p>'+esc(t.status)+' · '+esc(window.NVWorkspace.reason(t,date))+(t.projectId?' · '+esc(data.projects.find(p=>p.id===t.projectId)?.name||'Проект не найден'):'')+'</p></div><button data-edit-task="'+esc(t.id)+'" '+(serverMode()?'disabled':'')+'>Изменить</button></div>').join('')||'<div class="empty">Задач в этом списке нет.</div>';
+  return tasks.map(t=>'<div class="record"><div><b>'+esc(t.title)+'</b><p>'+esc(t.status)+' · '+esc(window.NVWorkspace.reason(t,date))+(t.orderId?' · Заказ: '+esc((data.orders||[]).find(o=>o.id===t.orderId)?.name||'не найден'):'')+(t.projectId?' · '+esc(data.projects.find(p=>p.id===t.projectId)?.name||'Проект не найден'):'')+'</p></div><button data-edit-task="'+esc(t.id)+'" '+(serverMode()?'disabled':'')+'>Изменить</button></div>').join('')||'<div class="empty">Задач в этом списке нет.</div>';
 }
 function bindTaskEditors(){document.querySelectorAll('[data-edit-task]').forEach(b=>b.onclick=()=>editTask(b.dataset.editTask));}
-function editTask(id=null,projectId=''){
+function editTask(id=null,projectId='',orderId=''){
   if(serverMode())return;
   const current=id?data.tasks.find(t=>t.id===id):null;
   if(id&&!current)return;
-  const t=current||{title:'',status:'Новая',projectId,dueDate:''};
+  const t=current||{title:'',status:'Новая',projectId,orderId,dueDate:''};
   const p=$('#page');
   p.innerHTML=layout(id?'Изменить задачу':'Новая задача','Срок, проект и статус сохраняются вместе.',
-    '<section class="panel full connection-panel"><form id="taskForm"><label>Название<input id="taskTitle" maxlength="300" required value="'+esc(t.title)+'"></label><div class="form-grid"><label>Срок по Москве<input type="date" id="taskDue" value="'+esc(t.dueDate||'')+'"></label><label>Статус<select id="taskStatus">'+['Новая','В работе','Выполнена'].map(v=>'<option '+(v===t.status?'selected':'')+'>'+v+'</option>').join('')+'</select></label></div><label>Проект<select id="taskProject">'+projectOptions(t.projectId)+'</select></label><p id="formError" role="alert"></p><button class="secondary" type="submit">Сохранить задачу</button><button class="secondary" id="cancelTask" type="button">Отмена</button></form></section>');
+    '<section class="panel full connection-panel"><form id="taskForm"><label>Название<input id="taskTitle" maxlength="300" required value="'+esc(t.title)+'"></label><div class="form-grid"><label>Срок по Москве<input type="date" id="taskDue" value="'+esc(t.dueDate||'')+'"></label><label>Статус<select id="taskStatus">'+['Новая','В работе','Выполнена'].map(v=>'<option '+(v===t.status?'selected':'')+'>'+v+'</option>').join('')+'</select></label></div><label>Проект<select id="taskProject">'+projectOptions(t.projectId)+'</select></label><label>Заказ<select id="taskOrder">'+options(data.orders||[],t.orderId,'Без заказа')+'</select></label><p id="formError" role="alert"></p><button class="secondary" type="submit">Сохранить задачу</button><button class="secondary" id="cancelTask" type="button">Отмена</button></form></section>');
   $('#cancelTask').onclick=()=>nav('Задачи');
   $('#taskForm').onsubmit=e=>{e.preventDefault();localChange(()=>{
     const values=window.NVWorkspace.validateTask({title:$('#taskTitle').value,status:$('#taskStatus').value,dueDate:$('#taskDue').value,projectId:$('#taskProject').value},data,id);
-    const record={...(current||{}),...values,id:id||uid('task'),updatedAt:new Date().toISOString()};
-    if(!values.dueDate)delete record.dueDate;if(!values.projectId)delete record.projectId;
+    const linkedOrder=$('#taskOrder').value||'';if(linkedOrder&&!(data.orders||[]).some(o=>o.id===linkedOrder))throw Error('Заказ не найден.');
+    const record={...(current||{}),...values,orderId:linkedOrder,id:id||uid('task'),updatedAt:new Date().toISOString()};
+    if(!linkedOrder)delete record.orderId;if(!values.dueDate)delete record.dueDate;if(!values.projectId)delete record.projectId;
     if(current)data.tasks[data.tasks.findIndex(x=>x.id===id)]=record;else data.tasks.unshift(record);
     data.taskContext={lastId:record.id,pending:null};
   },()=>{taskFilter='all';taskProject='';nav('Задачи');});};
@@ -404,7 +444,7 @@ function editProject(){
 }
 
 function showError(message){const notice=document.createElement('p');notice.className='remote-error';notice.setAttribute('role','alert');notice.textContent=message;$('#page').prepend(notice);}
-function replaceData(state){for(const key of Object.keys(data))delete data[key];Object.assign(data,structuredClone(state));}
+function replaceData(state){for(const key of Object.keys(data))delete data[key];Object.assign(data,structuredClone(state));data.orders ||= [];}
 function renderSearch(p){
  p.innerHTML=layout('Поиск по пространству','Задачи, проекты, память, клиенты и документы.',
  '<section class="panel full"><label class="search-field">'+icon('search')+'<input id="workspaceSearch" type="search" aria-label="Поиск по записям" placeholder="Название, контакт или фраза из документа…" maxlength="300"></label><p id="searchCount" class="muted" role="status">Введите слова для поиска.</p><div id="searchResults"></div></section>');
@@ -412,7 +452,7 @@ function renderSearch(p){
  const hits=window.NVSearch.search(data,input.value);
  $('#searchCount').textContent=input.value.trim()?(hits.length?'Найдено: '+hits.length+(hits.length===100?' (первые 100)':''):'Совпадений нет.'):'Введите слова для поиска.';
  $('#searchResults').innerHTML=hits.map((x,i)=>'<button class="search-result" data-hit="'+i+'">'+icon(x.icon)+'<span><small>'+esc(x.page)+'</small><b>'+esc(x.title)+'</b><span>'+esc(x.detail)+'</span></span>'+icon('arrow')+'</button>').join('');
- document.querySelectorAll('[data-hit]').forEach(b=>b.onclick=()=>{const hit=hits[Number(b.dataset.hit)];if(hit.page==='Проекты')selectedProjectId=hit.id;if(hit.page==='Задачи'&&!serverMode()){editTask(hit.id);return;}nav(hit.page);});
+ document.querySelectorAll('[data-hit]').forEach(b=>b.onclick=()=>{const hit=hits[Number(b.dataset.hit)];if(hit.page==='Проекты')selectedProjectId=hit.id;if(hit.page==='Клиенты')selectedClientId=hit.id;if(hit.page==='Заказы')selectedOrderId=hit.id;if(hit.page==='Задачи'&&!serverMode()){editTask(hit.id);return;}nav(hit.page);});
  };
 }
 function downloadJSON(content,name){const url=URL.createObjectURL(new Blob([content],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
@@ -425,11 +465,11 @@ function renderData(p){
  $('#exportBackup').onclick=()=>downloadJSON(storage.problem()?storage.raw()||'':storage.export(local),'nasha-volna-'+new Date().toISOString().slice(0,10)+'.json');
  $('#undoChange').onclick=()=>{if(serverMode()||!storage.canUndo())return;try{const restored=storage.undo();storage.commit(restored,'Отменено последнее изменение',data,true);replaceData(restored);savedSnapshot=structuredClone(data);render('Данные');}catch(e){showError(e.message);}};
  let candidate=null;
- $('#backupFile').onchange=async e=>{candidate=null;$('#applyBackup').disabled=true;$('#formError').textContent='';const file=e.target.files[0];if(!file)return;try{if(file.size>5000000)throw Error('Размер файла превышает 5 МБ.');candidate=window.NVStorage.parseBackup(await file.text());$('#backupPreview').textContent='Проверено: '+candidate.tasks.length+' задач, '+candidate.projects.length+' проектов, '+candidate.docs.length+' документов, '+candidate.clients.length+' клиентов, '+candidate.memories.length+' фактов, '+candidate.messages.length+' сообщений.';$('#applyBackup').disabled=false;}catch(error){$('#backupPreview').textContent='';$('#formError').textContent=error.message;}};
+ $('#backupFile').onchange=async e=>{candidate=null;$('#applyBackup').disabled=true;$('#formError').textContent='';const file=e.target.files[0];if(!file)return;try{if(file.size>5000000)throw Error('Размер файла превышает 5 МБ.');candidate=window.NVStorage.parseBackup(await file.text());$('#backupPreview').textContent='Проверено: '+candidate.tasks.length+' задач, '+candidate.projects.length+' проектов, '+candidate.docs.length+' документов, '+candidate.clients.length+' клиентов, '+candidate.orders.length+' заказов, '+candidate.memories.length+' фактов, '+candidate.messages.length+' сообщений.';$('#applyBackup').disabled=false;}catch(error){$('#backupPreview').textContent='';$('#formError').textContent=error.message;}};
  $('#applyBackup').onclick=()=>{if(candidate)localChange(()=>replaceData(candidate),()=>render('Данные'),'Восстановлена резервная копия');};
  if(storage.problem())showError(storage.problem()+' Изменения заблокированы; исходный файл доступен по кнопке скачивания.');
 }
-const pageIcons={'Обзор':'overview','AI':'ai','Память':'memory','Задачи':'tasks','Проекты':'projects','Клиенты':'clients','Документы':'docs','Данные':'data'};
+const pageIcons={'Обзор':'overview','AI':'ai','Память':'memory','Задачи':'tasks','Проекты':'projects','Клиенты':'clients','Заказы':'orders','Документы':'docs','Данные':'data'};
 document.querySelectorAll('nav a').forEach(a=>{a.innerHTML=icon(pageIcons[a.dataset.page])+'<span>'+esc(a.dataset.page)+'</span>';a.setAttribute('href','#'+encodeURIComponent(a.dataset.page));a.setAttribute('title',a.dataset.page);a.setAttribute('aria-label',a.dataset.page);a.onclick=e=>{e.preventDefault();nav(a.dataset.page);};});
 $('#brandMark').innerHTML=icon('wave');
 $('#globalSearch').innerHTML=icon('search')+'<span>Поиск по пространству</span><kbd>Ctrl K</kbd>';
