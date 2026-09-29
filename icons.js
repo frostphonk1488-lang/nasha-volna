@@ -2,6 +2,9 @@
 'use strict';
 const paths={
  wave:'M3 15c3 0 3-6 6-6s3 6 6 6 3-6 6-6M3 20c3 0 3-6 6-6s3 6 6 6 3-6 6-6M3 10c3 0 3-6 6-6s3 6 6 6 3-6 6-6',
+ catalog:'M4 4h7v7H4zM14 4h7v7h-7zM4 14h7v7H4zM14 14h7v7h-7z',
+ warehouse:'M3 10 12 3l9 7v11H3V10ZM8 21V12h8v9M8 16h8',
+ purchase:'M3 3h2l3 12h10l3-9H6M9 21a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm9 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z',
  overview:'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
  ai:'M12 3v3m0 12v3M3 12h3m12 0h3M7 7l-2-2m12 2 2-2M7 17l-2 2m12-2 2 2M9 8h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z',
  memory:'M12 3 3 8l9 5 9-5-9-5ZM3 12l9 5 9-5M3 16l9 5 9-5',
@@ -17,3 +20,4 @@ const paths={
  arrow:'M7 17 17 7M7 7h10v10',plus:'M12 5v14M5 12h14'};
 root.NVIcon=name=>'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+(paths[name]||paths.wave)+'"/></svg>';
 })(globalThis);
+

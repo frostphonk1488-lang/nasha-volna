@@ -10,11 +10,13 @@ function order(v,data){
  if(!data.clients.some(x=>x.id===v.clientId))throw Error('Выберите существующего клиента.');
  if(!stages.includes(v.status))throw Error('Выберите этап заказа.');
  if(v.projectId&&!data.projects.some(x=>x.id===v.projectId))throw Error('Проект не найден.');
+ if(v.ownerId&&!data.employees?.some(e=>e.id===v.ownerId))throw Error('Сотрудник не найден.');
  const amount=v.amount?.trim()? (cents(v.amount)/100).toFixed(2):'';
- return {name,clientId:v.clientId,status:v.status,amount,dueDate:date(v.dueDate),projectId:v.projectId||'',owner:trim(v.owner,300,'Ответственный'),notes:trim(v.notes,5000,'Описание')};
+ return {name,clientId:v.clientId,status:v.status,amount,dueDate:date(v.dueDate),projectId:v.projectId||'',owner:trim(v.owner,300,'Ответственный'),ownerId:v.ownerId||'',paymentDueDate:date(v.paymentDueDate),notes:trim(v.notes,5000,'Описание')};
 }
 function summary(data,clientId){const orders=(data.orders||[]).filter(o=>!clientId||o.clientId===clientId),active=orders.filter(o=>!['Выполнен','Отменён'].includes(o.status));let amountCents=0,unknown=0;for(const o of active){if(!o.amount){unknown++;continue;}amountCents+=cents(o.amount);}return {orders,active,amountCents,unknown};}
 function removeClient(data,id){if((data.orders||[]).some(o=>o.clientId===id))throw Error('У клиента есть заказы. Сначала перенесите или удалите их.');data.clients=data.clients.filter(c=>c.id!==id);}
 function removeOrder(data,id){if((data.ledger||[]).some(e=>e.orderId===id))throw Error('У заказа есть финансовые операции. Выберите этап «Отменён»: записи должны сохранить связь с заказом.');if((data.docs||[]).some(d=>d.orderId===id))throw Error('У заказа есть документы. Сначала отвяжите их.');if(data.tasks.some(t=>t.orderId===id))throw Error('У заказа есть задачи. Сначала отвяжите их или выберите этап «Отменён».');data.orders=data.orders.filter(o=>o.id!==id);}
 return {stages,cents,client,order,summary,removeClient,removeOrder};
 });
+

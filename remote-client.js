@@ -17,6 +17,7 @@ async function call(config,path,body){
     let data;
     try{data=await response.json();}catch(e){throw Error('Сервер вернул неподдерживаемый ответ.');}
     if(!response.ok){const e=Error(data.error||'Ошибка сервера.');e.status=response.status;throw e;}
+    if(path==='/api/audit'){if(!Array.isArray(data.events))throw Error('Некорректный журнал.');return data;}
     if(!data.state||!Number.isInteger(data.revision)||!Array.isArray(data.plans)||!['messages','tasks','memories','projects','clients','employees','docs'].every(k=>Array.isArray(data.state[k]))) throw Error('Неподдерживаемый формат данных сервера.');
     return data;
   }catch(e){
@@ -25,6 +26,9 @@ async function call(config,path,body){
   }finally{clearTimeout(timer);}
 }
 const api={
+  get pending(){return Boolean(pendingRequest);},
+  async retry(){if(!connection||!pendingRequest)throw Error('Нет ожидающего запроса.');const result=await call(connection,pendingRequest.path,pendingRequest.body);view=result;pendingRequest=null;return result;},
+  async audit(){if(!connection)throw Error('Сервер не подключён.');return call(connection,'/api/audit');},
   get connected(){return Boolean(connection);},get view(){return view;},
   async connect(url,token){
     if(typeof token!=='string'||token.trim().length<32)throw Error('Нужен ключ рабочего пространства (от 32 символов), выданный администратором сервера.');
@@ -37,9 +41,11 @@ const api={
   async post(path,body){
     if(!connection)throw Error('Сервер не подключён.');
     const signature=JSON.stringify({path,body,revision:view.revision});
-    if(!pendingRequest||pendingRequest.signature!==signature) pendingRequest={signature,body:{...body,revision:view.revision,requestId:crypto.randomUUID()}};
-    const result=await call(connection,path,pendingRequest.body);view=result;pendingRequest=null;return result;
+    if(pendingRequest&&pendingRequest.signature!==signature)throw Error('Сначала повторите предыдущий запрос или обновите данные.');
+    if(!pendingRequest) pendingRequest={signature,path,body:{...body,revision:view.revision,requestId:crypto.randomUUID()}};
+    try{const result=await call(connection,path,pendingRequest.body);view=result;pendingRequest=null;return result;}catch(e){if(e.status)pendingRequest=null;throw e;}
   }
 };
 root.NVRemote=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
+

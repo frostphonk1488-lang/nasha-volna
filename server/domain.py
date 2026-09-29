@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone
 import re
 import uuid
 
-COLLECTIONS = ('tasks', 'memories', 'projects', 'clients', 'employees', 'docs')
+COLLECTIONS = ('tasks', 'memories', 'projects', 'clients', 'employees', 'docs', 'orders', 'ledger', 'products', 'stock', 'purchases')
 KINDS = ('task.create', 'task.update', 'memory.save', 'memory.update', 'memory.delete', 'project.create', 'client.create', 'document.create')
 FIELDS = ('kind', 'id', 'title', 'text', 'status', 'dueDate', 'projectId', 'projectName')
 
@@ -27,49 +27,8 @@ def empty_state():
 
 
 def validate_import(raw):
-    if not isinstance(raw, dict):
-        raise Problem('Ожидается объект данных.')
-    if raw.get('orders') or raw.get('ledger'):
-        raise Problem('Сервер пока не поддерживает заказы и финансовые операции. Импорт отменён без изменений.')
-    for key in ('tasks', 'docs'):
-        if isinstance(raw.get(key), list) and any(isinstance(row, dict) and row.get('orderId') for row in raw[key]):
-            raise Problem('Сервер пока не поддерживает связи с заказами.')
-    state = empty_state()
-    fields = {'tasks': ('title', 'status', 'dueDate', 'projectId'), 'memories': ('type', 'text'),
-              'projects': ('name', 'desc'), 'clients': ('name', 'contact', 'notes', 'createdAt', 'updatedAt'),
-              'employees': ('name', 'role'), 'docs': ('name', 'desc', 'text', 'projectId', 'folder', 'updatedAt')}
-    required = {'tasks': 'title', 'memories': 'text', 'projects': 'name', 'clients': 'name', 'employees': 'name', 'docs': 'name'}
-    for key in COLLECTIONS:
-        rows = raw.get(key, [])
-        if not isinstance(rows, list) or len(rows) > 500:
-            raise Problem('Не более 500 записей в каждом разделе.')
-        seen = set()
-        for row in rows:
-            if not isinstance(row, dict):
-                raise Problem('Некорректная запись.')
-            ident = text(row.get('id'), 'id', 100)
-            if not re.fullmatch(r'[A-Za-z0-9_-]+', ident) or ident in seen:
-                raise Problem('Некорректный или повторяющийся id.')
-            seen.add(ident)
-            result = {'id': ident}
-            for field in fields[key]:
-                value = row.get(field)
-                if value is not None:
-                    if not isinstance(value, str) or len(value) > (20000 if key == 'docs' and field == 'text' else 5000 if key == 'clients' and field == 'notes' else 2000):
-                        raise Problem('Слишком длинное или некорректное поле.')
-                    result[field] = value
-            text(result.get(required[key]), required[key])
-            if key == 'tasks':
-                result.setdefault('status', 'Новая')
-                check_status(result['status'])
-                check_date(result.get('dueDate'))
-            state[key].append(result)
-    project_ids = {p['id'] for p in state['projects']}
-    for row in state['tasks'] + state['docs']:
-        if row.get('projectId') and row['projectId'] not in project_ids:
-            raise Problem('Не найден проект связанной записи.')
-    # Import records only: local transcripts never acquire trusted assistant roles.
-    return state
+    from .records import validate
+    return validate(raw)
 
 
 def check_status(status):
@@ -170,3 +129,4 @@ def apply_actions(state, actions):
     if any(len(state[k]) > 500 for k in COLLECTIONS):
         raise Problem('Достигнут лимит MVP: 500 записей на раздел.')
     return state, log
+

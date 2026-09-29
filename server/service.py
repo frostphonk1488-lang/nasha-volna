@@ -10,6 +10,7 @@ import time
 import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from .records import apply_batch, WRITES
 from .domain import COLLECTIONS, Problem, apply_actions, empty_state, text, validate_import
 
 
@@ -43,7 +44,9 @@ class Service:
     def _load(self,db,workspace):
         db.execute('INSERT OR IGNORE INTO workspaces VALUES(?,?,0)',(workspace,dumps(empty_state())))
         row = db.execute('SELECT * FROM workspaces WHERE id=?',(workspace,)).fetchone()
-        return json.loads(row['state']), row['revision']
+        state=json.loads(row['state'])
+        for key in COLLECTIONS: state.setdefault(key,[])
+        return state, row['revision']
 
     def _save(self,db,workspace,state,revision):
         state['messages'] = state['messages'][-500:]
@@ -58,6 +61,10 @@ class Service:
     def state(self,workspace):
         with self.lock, self.connect() as db:
             return self._view(db,workspace)
+
+    def audit(self,workspace):
+        with self.lock, self.connect() as db:
+            return [{'id':row['id'],'event':row['event'],'created':row['created'],'detail':json.loads(row['detail'])} for row in db.execute('SELECT * FROM audit WHERE workspace=? ORDER BY id DESC LIMIT 100',(workspace,))]
 
     def context(self,state,query):
         words = set(re.findall(r'\w{3,}',query.casefold()))
@@ -87,10 +94,14 @@ class Service:
         return {'today':datetime.now(ZoneInfo('Europe/Moscow')).date().isoformat(),
                 'counts':counts,'records':selected,'truncated':len(selected)<sum(counts.values()) or any(x['record'].get('excerpt') for x in selected)}
 
-    def dispatch(self,workspace,path,payload):
+    def dispatch(self,workspace,path,payload,actor='owner',role='owner'):
+        if role not in WRITES: raise Problem('Нет доступа.',403)
+        if path=='/api/import' and role!='owner': raise Problem('Импорт доступен владельцу.',403)
+        if path.startswith('/api/plans/') and path.endswith('/confirm') and role!='owner': raise Problem('Применение AI-планов доступно владельцу.',403)
+        if path=='/api/chat' and role!='owner': raise Problem('AI пока доступен владельцу пространства.',403)
         if not isinstance(payload,dict): raise Problem('Ожидается JSON-объект.')
         request_id=text(payload.get('requestId'),'requestId',100)
-        fingerprint=hashlib.sha256((path+dumps(payload)).encode()).hexdigest()
+        fingerprint=hashlib.sha256((actor+':'+role+':'+path+dumps(payload)).encode()).hexdigest()
         with self.lock, self.connect() as db:
             prior=db.execute('SELECT * FROM requests WHERE workspace=? AND id=?',(workspace,request_id)).fetchone()
             if prior:
@@ -103,7 +114,15 @@ class Service:
                 if revision or any(state[k] for k in COLLECTIONS) or state['messages']:
                     raise Problem('Импорт разрешён только в пустое рабочее пространство.',409)
                 state=validate_import(payload.get('data'))
+                for collection in COLLECTIONS:
+                    for row in state[collection]:
+                        row.pop('updatedBy',None);row['createdBy']=actor
+                db.execute('INSERT INTO audit(workspace,event,detail,created) VALUES(?,?,?,?)',(workspace,'records.imported',dumps({'actor':actor,'requestId':request_id,'counts':{k:len(state[k]) for k in COLLECTIONS}}),time.time()))
                 extra['message']='Записи импортированы. Локальная история диалога осталась в браузере.'
+            elif path=='/api/records':
+                state,changes=apply_batch(state,payload.get('operations'),actor,role)
+                db.execute('INSERT INTO audit(workspace,event,detail,created) VALUES(?,?,?,?)',(workspace,'records.changed',dumps({'actor':actor,'role':role,'requestId':request_id,'changes':changes}),time.time()))
+                extra['message']='Изменения сохранены на сервере.'
             elif path=='/api/chat':
                 message=text(payload.get('message'),'message',6000)
                 now=time.monotonic()
@@ -143,7 +162,7 @@ class Service:
                 if parts[4]=='confirm':
                     state,log=apply_actions(state,json.loads(plan['actions']))
                     extra['message']='Выполнено:\n'+'\n'.join(x['kind']+' — '+x['label'] for x in log)
-                    db.execute('INSERT INTO audit(workspace,event,detail,created) VALUES(?,?,?,?)',(workspace,'plan.applied',dumps({'plan':plan['id'],'actions':log}),time.time()))
+                    db.execute('INSERT INTO audit(workspace,event,detail,created) VALUES(?,?,?,?)',(workspace,'plan.applied',dumps({'actor':actor,'role':role,'plan':plan['id'],'actions':log}),time.time()))
                 else: extra['message']='План отменён. Данные не изменены.'
                 state['messages'].append({'id':uuid.uuid4().hex,'role':'assistant','text':extra['message']})
                 db.execute('UPDATE plans SET status=? WHERE id=?',('applied' if parts[4]=='confirm' else 'cancelled',plan['id']))
@@ -153,3 +172,4 @@ class Service:
             self._save(db,workspace,state,revision+1)
             db.execute('INSERT INTO requests VALUES(?,?,?,?)',(workspace,request_id,fingerprint,dumps(extra)))
             return {**extra,**self._view(db,workspace)}
+

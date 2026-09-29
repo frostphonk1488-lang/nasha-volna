@@ -1,17 +1,18 @@
 (function(root,factory){const api=factory();if(typeof module==='object')module.exports=api;else root.NVStorage=api;})(typeof globalThis!=='undefined'?globalThis:this,()=>{
 'use strict';
-const keys=['messages','memories','tasks','projects','clients','employees','docs','orders','ledger'];
+const keys=['messages','memories','tasks','projects','clients','employees','docs','orders','ledger','products','stock','purchases'];
 const copy=x=>JSON.parse(JSON.stringify(x));
 function clean(state){const result={};for(const key of keys)result[key]=copy(state[key]||[]);if(state.taskContext)result.taskContext=copy(state.taskContext);return result;}
 function parseBackup(text){
  if(text.length>5000000)throw Error('Размер копии превышает 5 МБ.');
  const envelope=JSON.parse(text);
- if(envelope.format!=='nasha-volna-backup'||![1,2,3].includes(envelope.version))throw Error('Нужна резервная копия Nasha Volna версии 1, 2 или 3.');
+ if(envelope.format!=='nasha-volna-backup'||![1,2,3,4].includes(envelope.version))throw Error('Нужна резервная копия Nasha Volna версии 1, 2, 3 или 4.');
  const state=envelope.state;
  if(!state||typeof state!=='object')throw Error('В копии нет данных.');
  if(envelope.version===1&&!Object.hasOwn(state,'orders'))state.orders=[];
  if(envelope.version<3&&!Object.hasOwn(state,'ledger'))state.ledger=[];
- const required={messages:['text'],memories:['text','type'],tasks:['title','status'],projects:['name'],clients:['name'],employees:['name'],docs:['name'],orders:['name','clientId','status','amount'],ledger:['kind','amount','date','orderId','category','note']};
+ if(envelope.version<4)for(const k of ['products','stock','purchases'])if(!Object.hasOwn(state,k))state[k]=[];
+ const required={messages:['text'],memories:['text','type'],tasks:['title','status'],projects:['name'],clients:['name'],employees:['name'],docs:['name'],orders:['name','clientId','status','amount'],products:['name','sku','unit','minStock'],stock:['productId','kind','quantity','note'],purchases:['productId','quantity','supplier','status'],ledger:['kind','amount','date','orderId','category','note']};
  for(const key of keys){
   if(!Array.isArray(state[key])||state[key].length>10000)throw Error('Некорректный раздел: '+key);
   const ids=new Set();
@@ -27,7 +28,7 @@ function parseBackup(text){
  for(const order of state.orders){if(!state.clients.some(c=>c.id===order.clientId))throw Error('В заказе указан отсутствующий клиент.');if(!['Новый','В работе','На проверке','Выполнен','Отменён'].includes(order.status))throw Error('Неизвестный этап заказа.');if(order.amount&&!/^\d{1,9}\.\d{2}$/.test(order.amount))throw Error('Некорректная сумма заказа.');}
  for(const task of state.tasks)if(task.orderId&&!state.orders.some(o=>o.id===task.orderId))throw Error('В задаче указан отсутствующий заказ.');
  const validDate=v=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(v))return false;const d=new Date(v+'T12:00:00Z');return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v;};
- for(const row of [...state.orders,...state.tasks])if(row.dueDate&&!validDate(row.dueDate))throw Error('Некорректная дата срока.');
+ for(const row of [...state.orders,...state.tasks]){if(row.dueDate&&!validDate(row.dueDate))throw Error('Некорректная дата срока.');if(row.paymentDueDate&&!validDate(row.paymentDueDate))throw Error('Некорректная дата оплаты.');}
  for(const doc of state.docs){if(doc.orderId&&!state.orders.some(o=>o.id===doc.orderId))throw Error('В документе указан отсутствующий заказ.');if(doc.projectId&&!state.projects.some(p=>p.id===doc.projectId))throw Error('В документе указан отсутствующий проект.');}
  const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
  const reversed=new Set();
@@ -43,6 +44,7 @@ function parseBackup(text){
    reversed.add(original.id);
   }else if(entry.reversalOf)throw Error('Лишняя ссылка исправления.');
  }
+ if(typeof globalThis.NVOperations!=='undefined')globalThis.NVOperations.validateState(state);
  const result=clean(state);delete result.taskContext;return result;
 }
 function open(storage,key){
@@ -56,7 +58,8 @@ function open(storage,key){
   const next=JSON.stringify({...clean(state),_meta:nextMeta});storage.setItem(key,next);raw=next;meta=nextMeta;
  }
  return {commit,history:()=>copy(Array.isArray(meta.history)?meta.history:[]),canUndo:()=>!!meta.undo&&!problem,undo:()=>copy(meta.undo),problem:()=>problem,raw:()=>raw,
- export:state=>JSON.stringify({format:'nasha-volna-backup',version:3,createdAt:new Date().toISOString(),state:clean(state)},null,2)};
+ export:state=>JSON.stringify({format:'nasha-volna-backup',version:4,createdAt:new Date().toISOString(),state:clean(state)},null,2)};
 }
 return {open,parseBackup,clean};
 });
+
