@@ -59,8 +59,24 @@ const uid = p => p + '-' + Date.now().toString(36) + Math.random().toString(36).
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const activeTasks = () => data.tasks.filter(x => x.status !== 'Выполнена').length;
 
+const navigationGroups={'Задачи':'Работа','Проекты':'Работа','Клиенты':'Продажи','Заказы':'Продажи','Закупки':'Снабжение','Каталог':'Снабжение','Склад':'Снабжение','Команда':'Компания','Документы':'Компания','AI':'AI-ассистент','Память':'AI-ассистент','Подключение':'Настройки','Данные':'Настройки'};
+function syncNavigation(page){
+  document.querySelectorAll('nav a').forEach(a=>{
+    const active=a.dataset.page===page;
+    a.classList.toggle('active',active);
+    if(active)a.setAttribute('aria-current','page');else a.removeAttribute?.('aria-current');
+  });
+  document.querySelectorAll('.nav-group').forEach(group=>{
+    const active=Array.from(group.querySelectorAll('a')).some(a=>a.dataset.page===page);
+    group.classList.toggle('has-active',active);
+    group.open=active;
+  });
+  const crumb=$('#navBreadcrumb');
+  if(crumb)crumb.innerHTML=esc(navigationGroups[page]||'Nasha Volna')+' <span>/ '+esc(page==='AI'?'Чат':page==='Команда'?'Сотрудники':page)+'</span>';
+}
 function nav(page){
-  document.querySelectorAll('nav a').forEach(a => a.classList.toggle('active', a.dataset.page === page));
+  syncNavigation(page);
+  const menu=$('#mobileMenu');if(menu?.open)menu.close();
   render(page);
 }
 
@@ -70,6 +86,7 @@ function layout(title, subtitle, body){
 
 function render(page='AI'){
   currentPage=page;
+  syncNavigation(page);
   const p = $('#page');
   if(!p) return;
   const pages={'Обзор':renderOverview,'AI':renderAI,'Память':renderMemory,'Задачи':renderTasks,'Проекты':renderProjects,'Клиенты':renderClients,'Заказы':renderOrders,'Финансы':renderFinance,'Документы':renderDocs,'Подключение':renderConnection,'Поиск':renderSearch,'Данные':renderData,'Команда':p=>operationsRenderer('Команда',p),'Каталог':p=>operationsRenderer('Каталог',p),'Склад':p=>operationsRenderer('Склад',p),'Закупки':p=>operationsRenderer('Закупки',p)};
@@ -551,8 +568,21 @@ function renderData(p){
  $('#applyBackup').onclick=()=>{if(candidate)localChange(()=>replaceData(candidate),()=>render('Данные'),'Восстановлена резервная копия');};
  if(storage.problem())showError(storage.problem()+' Изменения заблокированы; исходный файл доступен по кнопке скачивания.');
 }
-const pageIcons={'Обзор':'overview','AI':'ai','Память':'memory','Задачи':'tasks','Проекты':'projects','Клиенты':'clients','Заказы':'orders','Финансы':'finance','Документы':'docs','Данные':'data','Команда':'clients','Каталог':'catalog','Склад':'warehouse','Закупки':'purchase'};
-document.querySelectorAll('nav a').forEach(a=>{a.innerHTML=icon(pageIcons[a.dataset.page])+'<span>'+esc(a.dataset.page)+'</span>';a.setAttribute('href','#'+encodeURIComponent(a.dataset.page));a.setAttribute('title',a.dataset.page);a.setAttribute('aria-label',a.dataset.page);a.onclick=e=>{e.preventDefault();nav(a.dataset.page);};});
+const pageIcons={'Обзор':'overview','AI':'ai','Память':'memory','Задачи':'tasks','Проекты':'projects','Клиенты':'clients','Заказы':'orders','Финансы':'finance','Документы':'docs','Данные':'data','Команда':'clients','Каталог':'catalog','Склад':'warehouse','Закупки':'purchase','Подключение':'connection'};
+document.querySelectorAll('nav a').forEach(a=>{a.innerHTML=icon(pageIcons[a.dataset.page])+'<span>'+esc(a.dataset.label||a.dataset.page)+'</span>';a.setAttribute('href','#'+encodeURIComponent(a.dataset.page));a.setAttribute('title',a.dataset.label||a.dataset.page);a.setAttribute('aria-label',a.dataset.label||a.dataset.page);a.onclick=e=>{e.preventDefault();nav(a.dataset.page);};});
+document.querySelectorAll('[data-nav-icon]').forEach(el=>el.innerHTML=icon(el.dataset.navIcon));
+document.querySelectorAll('.nav-group').forEach(group=>{
+  group.addEventListener('toggle',()=>{if(group.open){const parent=group.parentElement;parent.querySelectorAll('.nav-group').forEach(other=>{if(other!==group)other.open=false;});}});
+});
+const menuToggle=$('#openMenu'),mobileMenu=$('#mobileMenu');
+if(menuToggle&&mobileMenu?.showModal){
+  menuToggle.innerHTML=icon('menu');$('#closeMenu').innerHTML=icon('close');
+  menuToggle.onclick=()=>{mobileMenu.showModal();menuToggle.setAttribute('aria-expanded','true');};
+  $('#closeMenu').onclick=()=>mobileMenu.close();
+  mobileMenu.addEventListener('close',()=>menuToggle.setAttribute('aria-expanded','false'));
+  mobileMenu.addEventListener('click',event=>{if(event.target===mobileMenu){const r=mobileMenu.getBoundingClientRect();if(event.clientX>r.right||event.clientX<r.left)mobileMenu.close();}});
+  window.matchMedia?.('(min-width: 981px)').addEventListener('change',event=>{if(event.matches&&mobileMenu.open)mobileMenu.close();});
+}
 $('#brandMark').innerHTML=icon('wave');
 $('#globalSearch').innerHTML=icon('search')+'<span>Поиск по пространству</span><kbd>Ctrl K</kbd>';
 $('#globalSearch').onclick=()=>nav('Поиск');
@@ -561,6 +591,7 @@ const theme=$('#theme');
 try{if(localStorage.getItem('nv_theme')==='light')document.body.classList.add('light');}catch(e){/* Storage diagnostics are shown below. */}
 theme.innerHTML=icon('sun');
 theme.onclick=()=>{document.body.classList.toggle('light');try{localStorage.setItem('nv_theme',document.body.classList.contains('light')?'light':'dark');}catch(e){showError('Не удалось сохранить тему.');}};
+syncNavigation('AI');
 render('AI');
 if(storage.problem())showError(storage.problem());
 })();

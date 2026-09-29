@@ -1,6 +1,7 @@
 (function(root){
 'use strict';
 const paths={
+ menu:'M4 6h16M4 12h16M4 18h16',close:'M6 6l12 12M18 6 6 18',connection:'M8 7h8v10H8V7ZM10 3v4m4-4v4m-4 10v4m4-4v4M3 10h5m-5 4h5m8-4h5m-5 4h5',
  wave:'M3 15c3 0 3-6 6-6s3 6 6 6 3-6 6-6M3 20c3 0 3-6 6-6s3 6 6 6 3-6 6-6M3 10c3 0 3-6 6-6s3 6 6 6 3-6 6-6',
  catalog:'M4 4h7v7H4zM14 4h7v7h-7zM4 14h7v7H4zM14 14h7v7h-7z',
  warehouse:'M3 10 12 3l9 7v11H3V10ZM8 21V12h8v9M8 16h8',
