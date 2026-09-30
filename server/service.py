@@ -3,14 +3,12 @@ import copy
 import hashlib
 import json
 from pathlib import Path
-import re
 import sqlite3
 import threading
 import time
 import uuid
-from datetime import datetime
-from zoneinfo import ZoneInfo
 from .records import apply_batch, WRITES
+from .engine import VERSION, retrieve, builtin, ground_actions
 from .domain import COLLECTIONS, Problem, apply_actions, empty_state, text, validate_import
 
 
@@ -56,7 +54,9 @@ class Service:
         state,revision = self._load(db,workspace)
         plans = [dict(row) for row in db.execute("SELECT id,actions FROM plans WHERE workspace=? AND status='pending' AND revision=? AND created>? ORDER BY created",(workspace,revision,time.time()-3600))]
         for plan in plans: plan['actions'] = json.loads(plan['actions'])
-        return {'state':state,'revision':revision,'plans':plans,'modelReady':self.provider.configured}
+        return {'state':state,'revision':revision,'plans':plans,'modelReady':self.provider.configured,
+                'ai':{'coreVersion':VERSION,'provider':getattr(self.provider,'name','custom'),
+                      'configured':self.provider.configured,'reportsWithoutModel':True}}
 
     def state(self,workspace):
         with self.lock, self.connect() as db:
@@ -67,32 +67,7 @@ class Service:
             return [{'id':row['id'],'event':row['event'],'created':row['created'],'detail':json.loads(row['detail'])} for row in db.execute('SELECT * FROM audit WHERE workspace=? ORDER BY id DESC LIMIT 100',(workspace,))]
 
     def context(self,state,query):
-        words = set(re.findall(r'\w{3,}',query.casefold()))
-        records = []
-        counts = {}
-        for collection in COLLECTIONS:
-            rows = state[collection]
-            counts[collection] = len(rows)
-            scored = sorted(enumerate(rows),key=lambda pair:(sum(word in dumps(pair[1]).casefold() for word in words),pair[0]),reverse=True)
-            for _, row in scored[:(12 if collection == 'docs' else 80)]:
-                item = copy.deepcopy(row)
-                if collection == 'docs':
-                    body = item.get('text',item.get('desc',''))
-                    if len(body)>6000:
-                        positions = [body.casefold().find(word) for word in words if word in body.casefold()]
-                        start = max(0,min(positions)-500) if positions else 0
-                        item['text'] = body[start:start+6000]
-                        item['excerpt'] = True
-                records.append({'source':collection+':'+row['id'],'record':item})
-        # Cap context size, preferring matching records while retaining explicit truncation metadata.
-        records.sort(key=lambda r:sum(word in dumps(r).casefold() for word in words),reverse=True)
-        selected, size = [], 0
-        for record in records:
-            length=len(dumps(record))
-            if size+length>65000: continue
-            selected.append(record); size+=length
-        return {'today':datetime.now(ZoneInfo('Europe/Moscow')).date().isoformat(),
-                'counts':counts,'records':selected,'truncated':len(selected)<sum(counts.values()) or any(x['record'].get('excerpt') for x in selected)}
+        return retrieve(state,query,state['messages'],budget=16000 if getattr(self.provider,'name','')=='ollama' else 40000)
 
     def dispatch(self,workspace,path,payload,actor='owner',role='owner'):
         if role not in WRITES: raise Problem('Нет доступа.',403)
@@ -130,26 +105,40 @@ class Service:
                 if len(recent)>=10: raise Problem('Слишком много запросов. Повторите через минуту.',429)
                 self.rates[workspace]=recent+[now]
                 context=self.context(state,message)
-                history=[{'role':m['role'],'content':m['text'][:6000]} for m in state['messages'][-20:]]
+                history=[]
+                history_size=0
+                for m in reversed(state['messages'][-20:]):
+                    content=m['text'][:3000]
+                    if history_size+len(content)>8000: break
+                    history.insert(0,{'role':m['role'],'content':content})
+                    history_size+=len(content)
                 history.append({'role':'user','content':message})
-                result=self.provider.respond(history,context)
+                result=builtin(state,message,context)
+                local_result=result is not None
+                if result is None: result=self.provider.respond(history,context)
                 if not isinstance(result,dict) or set(result)!={'reply','actions','sources'}:
                     raise Problem('Модель вернула неподдерживаемый ответ.',502)
                 reply=text(result.get('reply'),'reply',12000)
                 actions=result['actions']
                 if not isinstance(actions,list) or len(actions)>20: raise Problem('Некорректный план модели.',502)
-                if actions: apply_actions(state,actions)  # Dry run: validates the entire plan.
-                source_ids={r['source'] for r in context['records']}
+                if actions:
+                    ground_actions(actions,context,message)
+                    apply_actions(state,actions)  # Dry run: validates the entire plan.
+                source_ids={k+':'+r['id'] for k in COLLECTIONS for r in state[k]} if local_result else {r['source'] for r in context['records']}
                 if not isinstance(result['sources'],list) or any(not isinstance(s,str) or s not in source_ids for s in result['sources']):
                     raise Problem('Ответ содержит неподтверждённые источники. Попробуйте уточнить вопрос.',502)
                 sources=list(dict.fromkeys(result['sources']))
-                source_rows={r['source']:r['record'] for r in context['records']}
+                source_rows={k+':'+r['id']:r for k in COLLECTIONS for r in state[k]}
                 if sources:
                     reply+='\n\nИсточники:\n'+'\n'.join(s+' — '+str(source_rows[s].get('title') or source_rows[s].get('name') or source_rows[s].get('text',''))[:180] for s in sources)
                 if actions:
                     reply+='\n\nПлан подготовлен. Изменения ещё не применены — проверьте карточку ниже.'
                     ident='plan-'+uuid.uuid4().hex
                     db.execute('INSERT INTO plans VALUES(?,?,?,?,?,?)',(ident,workspace,revision+1,dumps(actions),'pending',time.time()))
+                db.execute('INSERT INTO audit(workspace,event,detail,created) VALUES(?,?,?,?)',
+                           (workspace,'ai.responded',dumps({'actor':actor,'requestId':request_id,'coreVersion':VERSION,
+                            'mode':'report' if local_result else getattr(self.provider,'name','custom'),
+                            'retrieved':len(context['records']),'sources':sources,'proposedActions':len(actions)}),time.time()))
                 state['messages'] += [{'id':uuid.uuid4().hex,'role':'user','text':message}, {'id':uuid.uuid4().hex,'role':'assistant','text':reply}]
             elif path.startswith('/api/plans/'):
                 parts=path.split('/')
@@ -172,4 +161,3 @@ class Service:
             self._save(db,workspace,state,revision+1)
             db.execute('INSERT INTO requests VALUES(?,?,?,?)',(workspace,request_id,fingerprint,dumps(extra)))
             return {**extra,**self._view(db,workspace)}
-

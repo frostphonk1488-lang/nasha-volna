@@ -100,6 +100,14 @@ function render(page='AI'){
   }
 }
 
+function aiCoreHTML(){
+  const info=serverMode()?remote().view.ai:null;
+  const provider={openai:'Внешняя модель',ollama:'Ollama на серверном ПК',custom:'Другая модель'};
+  const title=info?'Ядро '+esc(info.coreVersion):serverMode()?'Серверное ядро':'Команды этого браузера';
+  const description=info?'Сводки и поиск работают без модели. Для свободного разговора: '+(info.configured?(provider[info.provider]||'Настроенная модель')+'. Подключение проверяется при запросе.':'модель не настроена.'):'Для поиска по серверной базе и свободного разговора подключите своё ядро.';
+  return '<section class="panel context-card"><div class="panel-title"><b>'+title+'</b></div><p class="muted">'+description+'</p>'+(info?'<div class="metric"><span>Изменения AI</span><strong>По подтверждению</strong></div>':'')+'</section>';
+}
+
 function renderAI(p){
   const recent = data.messages.slice(-100).map(m =>
     '<div class="message '+(m.role==='user'?'user':'assistant')+'"><div class="bubble">'+esc(m.text).replace(/\n/g,'<br>')+'</div></div>'
@@ -118,7 +126,7 @@ function renderAI(p){
         (remoteError?'<p role="alert" class="remote-error">'+esc(remoteError)+'</p>':'')+
         '<div class="composer"><textarea aria-label="Сообщение AI" id="chatInput" placeholder="Напишите команду или вопрос…"></textarea><button id="sendBtn">Отправить '+icon('arrow')+'</button></div>'+
       '</section>'+
-      '<aside class="context">'+
+      '<aside class="context">'+aiCoreHTML()+
         '<section class="panel context-card"><div class="panel-title"><b>'+(serverMode()?'Сервер подключён':'Локальный режим')+'</b></div><p class="muted">'+(serverMode()?'Данные хранятся на подключённом сервере.': 'Для свободного разговора подключите сервер с языковой моделью.')+'</p><button id="connectionBtn" class="secondary">'+(serverMode()?'Подключение':'Подключить AI')+'</button>'+(serverMode()?'<button id="refreshRemote" class="secondary">Обновить</button>':'')+'</section>'+
         '<section class="panel context-card"><div class="panel-title"><b>Память</b><button data-go="Память">Открыть</button></div>'+
           (data.memories.slice(-4).reverse().map(m => '<div class="memory-line"><i>●</i><div><b>'+esc(m.type)+'</b><p>'+esc(m.text)+'</p></div></div>').join('') || '<p class="muted">Память пуста.</p>')+
@@ -131,6 +139,7 @@ function renderAI(p){
         '<section class="panel context-card quick-commands"><div class="panel-title"><b>Примеры</b></div>'+
           '<button id="overviewBtn">Рабочий обзор</button>'+
           '<button data-prompt="Финансовый обзор">Финансовый обзор</button>'+
+          '<button data-prompt="Складской обзор">Что заканчивается на складе</button>'+
           '<button data-prompt="План на сегодня">План на сегодня</button>'+
           '<button data-prompt="Какие у меня задачи?">Какие у меня задачи?</button>'+
           '<button data-prompt="Что ты помнишь?">Что ты помнишь?</button>'+
@@ -181,6 +190,10 @@ function renderAI(p){
 }
 
 function process(text){
+  if(['складской обзор','что заканчивается на складе'].includes(text.trim().toLocaleLowerCase('ru').replace(/[?!.]+$/,''))){
+    const low=data.products.filter(p=>window.NVOperations.balance(data,p.id)<window.NVOperations.qty(p.minStock||'0',true));
+    return 'Товаров ниже минимального остатка: '+low.length+'.'+(low.length?'\n'+low.slice(0,12).map(p=>p.name+' [products:'+p.id+']').join('\n'):'')+'\nРасчёт по всем движениям этого браузера. Данные не изменены.';
+  }
   const financeAnswer=window.NVFinance.answer(text,data);if(financeAnswer!==null)return financeAnswer;
   if(/^(запиши|создай|добавь|зарегистрируй)\s+(расход|поступление|оплату|возврат|платеж|платёж)/i.test(text.trim()))return 'Для финансовой операции откройте «Финансы → Записать операцию». Проверьте сумму, заказ и дату, затем подтвердите запись. Финансовая операция через чат не создана.';
   const workspaceAnswer=window.NVWorkspace?.answer(text,data);
@@ -429,8 +442,8 @@ async function sendRemote(message){
 function renderConnection(p){
   p.innerHTML=layout('Подключение AI','Локальный режим работает без сервера. Для свободного разговора нужен сервер с подключённой моделью.',
     '<section class="panel full connection-panel">'+(serverMode()?
-      '<p>Сервер подключён. Ключ доступа хранится только до закрытия или обновления страницы.</p><p>'+(remote().view.modelReady?'Настройки модели заданы. Доступ к API проверяется при отправке сообщения.':'Модель на сервере пока не настроена.')+'</p><button id="disconnectRemote" class="secondary">Вернуться в локальный режим</button><button id="importRemote" class="secondary">Импортировать локальные записи</button><p class="muted">Импорт доступен только в пустую серверную базу. Локальные записи сохраняются; история локального чата не переносится.</p>':
-      '<p>Администратор должен запустить сервер Nasha Volna и выдать ключ рабочего пространства. API-ключ модели хранится на сервере.</p><form id="connectForm"><label>Адрес сервера<input id="serverUrl" type="url" placeholder="https://ai.example.ru" required></label><label>Ключ рабочего пространства<input id="workspaceToken" type="password" autocomplete="off" required></label><p class="muted">Разговоры и импортированные записи будут передаваться на указанный сервер, а контекст запросов — подключённому поставщику модели. Используйте свой доверенный сервер.</p><button class="secondary" type="submit">Подключить</button></form>')+
+      '<p>Сервер подключён. Ключ доступа хранится только до закрытия или обновления страницы.</p><p>'+(remote().view.modelReady?'Настройки модели заданы. Доступ к API проверяется при отправке сообщения.':'Свободный разговор пока недоступен. На ядре 0.5 сводки и поиск работают без модели.')+'</p><button id="disconnectRemote" class="secondary">Вернуться в локальный режим</button><button id="importRemote" class="secondary">Импортировать локальные записи</button><p class="muted">Импорт доступен только в пустую серверную базу. Локальные записи сохраняются; история локального чата не переносится.</p>':
+      '<p>Администратор должен запустить сервер Nasha Volna и выдать ключ рабочего пространства. API-ключ модели хранится на сервере.</p><form id="connectForm"><label>Адрес сервера<input id="serverUrl" type="url" placeholder="https://ai.example.ru" required></label><label>Ключ рабочего пространства<input id="workspaceToken" type="password" autocomplete="off" required></label><p class="muted">Разговоры и импортированные записи будут передаваться на указанный сервер, а при использовании внешней модели контекст передаётся её поставщику. Для модели на ПК сервер поддерживает Ollama. Используйте свой доверенный сервер.</p><button class="secondary" type="submit">Подключить</button></form>')+
       '<p id="connectStatus" role="status"></p><button id="backToAI" class="secondary">Вернуться к чату</button></section>');
   $('#backToAI').onclick=()=>nav('AI');
   if(serverMode()){
@@ -595,4 +608,3 @@ syncNavigation('AI');
 render('AI');
 if(storage.problem())showError(storage.problem());
 })();
-

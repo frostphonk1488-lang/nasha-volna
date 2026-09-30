@@ -6,13 +6,13 @@ import os
 from urllib.parse import urlsplit
 from .records import WRITES
 from .domain import Problem
-from .provider import OpenAIProvider
+from .provider import configured_provider
 from .service import Service
 
 
 def make_handler(service,tokens,origins):
     class Handler(BaseHTTPRequestHandler):
-        server_version='NashaVolna/0.4'
+        server_version='NashaVolna/0.5'
         def log_message(self,*args):
             pass  # Never log credentials, message content or provider payloads.
         def setup(self):
@@ -88,10 +88,9 @@ def main():
         raise SystemExit('Configure NV_ACCESS_TOKENS: token (32+ characters) -> workspace name. Server not started.')
     origins={x.strip() for x in os.getenv('NV_ALLOWED_ORIGINS','https://frostphonk1488-lang.github.io').split(',') if x.strip()}
     if '*' in origins: raise SystemExit('Use explicit origins, not *.')
-    service=Service(os.getenv('NV_DATABASE','data/nasha-volna.sqlite3'),OpenAIProvider())
+    service=Service(os.getenv('NV_DATABASE','data/nasha-volna.sqlite3'),configured_provider())
     server=ThreadingHTTPServer((os.getenv('NV_BIND','127.0.0.1'),int(os.getenv('PORT','8080'))),make_handler(service,tokens,origins))
     print('Nasha Volna API started. Model configured:',service.provider.configured,flush=True)
     server.serve_forever()
 
 if __name__=='__main__': main()
-
